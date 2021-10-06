@@ -48,7 +48,7 @@ first();
 이벤트 발생 시 호출할 콜백 함수들을 관리하고, 호출된 콜백 함수의 실행 순서를 결정하는 역할을 담당한다. 노드가 종료될 때까지 이벤트 처리를 위한 작업을 반복하므로 루프라고 부른다.
 
 #### 백그라운드 
-setTimeout 같은 타이머나 이벤트 리스너들이 대기하는 곳이다. 자바스크립트가 아닌 다른 언어로 작서오딘 프로그램이라고 봐도 된다. 여러 작업이 동시에 실행될 수 있다.
+setTimeout 같은 타이머나 이벤트 리스너들이 대기하는 곳이다. 자바스크립트가 아닌 다른 언어로 작성된 프로그램이라고 봐도 된다. 여러 작업이 동시에 실행될 수 있다.
 
 #### 태스크 큐
 이벤트 발생 후, 백그라운드에서는 태스크 큐로 타이머나 이벤트 리스너의 콜백 함수를 보낸다. 정해진 순서대로 콜백들이 줄을 서 있으므로 콜백 큐라고도 부른다. 콜백들은 보통 완료된 순서대로 줄을 서 있지만 특정한 경우에는 순서가 바뀌기도 한다.
@@ -144,3 +144,382 @@ npm install -g npm
 ### vs code 설치
 1. https://code.visualstudio.com/ Visual Studio Code 홈페이지에서 자신의 컴퓨터에 맞는 버전을 다운받아서 설치한다.
 2. 설치한 vs code를 실행한다.
+
+<hr>
+
+## 자바스크립트
+
+let,var,const 나 class 아니면 화살표 함수같은 경우 이미 알고 있어야 이후에 나올 내용들을 이해할 수 있기에 생략하고 프로미스, async/await 등 심화 내용을 다루도록 하겠다.
+
+### 프로미스 
+자바스크립트와 노드에서는 주로 비동기를 접한다. 특히 이벤트 리스너를 사용할 때 콜백 함수를 자주 사용한다.
+
+```js
+const condition = ture; // true면 resolve, false면 reject
+const promise = new Promise((resolve, reject) => {
+    if (condition){
+        resolve('성공')
+    } else {
+        reject('실패')
+    }
+})
+//다른 코드가 들어갈 수 있음 , 코드는 node js 교과서 교재의 내용]
+promise.then((message) => {
+    console.log(message)
+})
+.catch((error) => {
+    console.log(error)
+})
+.finally(() => {
+    console.log('무조건')
+})
+
+```
+
+new Promise로 프로미스를 생성할 수 있으며, 그 내부에 resolve와 reject를 매개변수로 갖는 콜백 함수를 넣는다. 
+이렇게 만든 promise 변수에 then과 catch 메서드를 붙일 수 있다. 프로미스 내부에서 resolve가 호출되면 then이 실행되고, reject가 호출되면 catch가 실행된다. finally 부분은 성공/실패 여부와 상관없이 실행된다.
+resolve와 reject에 넣어준 인수는 각각 then과 catch의 매개변수에서 받을 수 있다.
+
+프로미스를 쉽게 설명하자면, 실행은 바로 하되 결괏값은 나중에 받는 객체이다. 결괏값은 실행이 완료된 후 then이나 catch 메서드를 통해 받는다.
+
+### async/await
+노드 7.6 버전부터 지원되는 기능으로, 노드처럼 비동기 위주로 프로그래밍을 해야할 때 도움이 된다.
+
+프로미스가 콜백 지옥을 해결했지만, 여전히 then과 catch가 계속 반복되어 코드가 많다. async/await 문법은 프로미스를 사용한 코드를 한 번 더 깔끔하게 줄여준다.
+
+예시
+```js
+function findAndSaveUser(users) {
+    Users.findOne({})
+    .then((user) => {
+        user.name = 'zero';
+        return user.save();
+    })
+    .then((user) => {
+        return users.findOne({gender:'m'});
+    })
+    .catch(err => {
+        console.error(err)
+    })
+}
+```
+
+이것을 async/await를 사용하면
+
+```js
+async function findAndSaveUser(users) {
+    let user = await Users.findOne({});
+    user.name = 'zero',
+    user = await user.save();
+    user = await users.findOne({gender : 'm'})
+}
+```
+
+이런식으로 코드를 줄일 수 있다. 하지만 위 코드는 에러를 처리하는 부분이 없으므로 추가 작업이 필요하다.
+
+```js
+async function findAndSaveUser(users) {
+    try{
+        let user = await Users.findOne({});
+        user.name = 'zero',
+        user = await user.save();
+        user = await users.findOne({gender : 'm'})
+    } catch (error) {
+        console.log(error)
+    }
+}
+```
+이렇게 try/catch 문으로 로직을 감쌌다. 프로미스의 catch 메서드처럼 try/catch 문의 catch 가 에러를 처리한다.
+
+- 화살표 함수도 사용할 수 있다.
+
+for 문과 async/await을 같이 써서 프로미스를 순차적으로 실행할 수 있다. for문과 함께 쓰는 것은 노드 10 버전부터 지원하는 문법이다.
+
+```js
+const promise1 = Promise.resolve('성공1');
+const promise2 = Promise.resolve('성공2');
+(async () => {
+    for await (promise of [promise1, promise2]) {
+        console.log(promise);
+    }
+})();
+```
+위 코드는 for await of 문을 사용해서 프로미스 배열을 순회하는 것이다. async 함수의 반환값은 항상 Promise로 감싸진다. 따라서 실행 후 then을 붙이거나 또 다른 async 함수안에서 await을 붙여서 처리할 수 있다.
+
+```js
+async function other() {
+    const result = await findAndSaveUser();
+}
+```
+
+## 프론트엔드 자바스크립트
+
+### AJAX
+ajax (asynchronous Javascript and xml) 는 비동기적 웹 서비스를 개발할 때 사용하는 기업이다.
+이름에 xml이 들어 있지만 꼭 xml을 사용해야 하는 것은 아니며, 요즘에는 json을 많이 사용한다.
+
+이걸 쉽게 설명하면 페이지 이동 없이 서버에 요청을 보내고 응답을 받는 기술이다.
+
+보통 ajax 요청은 jquery 나 axios 같은 라이브러리를 이용해서 보낸다. 
+```js
+axios.get('요청을 보낼 주소')
+.then((result) => {
+    console.log(result);
+    console.log(result.data);
+})
+.catch((error) => {
+    console.error(error);
+})
+```
+
+axios.get도 내부에 new Promise가 들어 있으므로 then과 catch를 사용할 수 있다. result.data에는 서버로부터 보낸 데이터가 들어 있다. 
+
+프로미스이므로 async/await 방식으로 변경할 수 있다. 익명 함수라서 즉시 실행을 위해 코드를 소괄호로 감싸서 호출해보도록 하겠다.
+
+```js
+(async () => {
+    try {
+        const result = await axios.get('주소');
+        console.log(result);
+        console.log(result.data)
+    } catch (error) {
+        console.error(error);
+    }
+})()
+```
+
+이번에는 post 방식의 요청을 보내겠다.
+
+```js
+(async () => {
+    try {
+        const result = await axios.post('주소', {
+            name: '이름',
+            birth : 2003
+        });
+        console.log(result);
+        console.log(result.data);
+    } catch (error) {
+        console.error(error);
+    }
+})();
+```
+위 코드는 전체적인 구조는 비슷한데 두 번째 인수로 데이터를 넣어 보내는 것이 다르다. GET 요청이면 axios.get을 POST 요청이면 axios.post를 사용한다.
+
+### FormData
+HTML form 태그의 데이터를 동적으로 제어할 수 있는 기능이다. 주로 ajax와 함께 사용된다.
+먼저 FormData 생성자로 formData 객체를 만든다. 
+
+```js
+const formData = new FormData();
+formData.append('test', ['name','test'])
+```
+
+생성된 객체의 append 메서드로 키-값 형식의 데이터를 저장할 수 있다. 
+- append 메서드를 여러 번 사용해서 키 하나에 여러 개의 값을 추가해도 된다.
+- has 주어진 키에 해당하는 값이 있는지 여부를 알린다. 
+- get 메서드는 주어진 키에 해당하는 값 하나를 가져온다.
+- getAll 메서드는 해당하는 모든 값을 가져온다.
+- delete 메서드는 현재 키를 제거한다.
+- set은 현재 키를 수정한다
+
+### encodeURIComponent, decodeURIComponent
+서버 종류에 따라 다르지만 주소에 한글이 들어갔을 때 한글 주소를 이해하지 못하는 경우가 있는데, 이럴 때는 window 객체의 메서드인 encodeURIComponent 메서드를 사용한다.
+
+```js
+(async () => {
+    try {
+        const result = await axios.get(`https://test.test/${encodeURIComponent('노드')}`);
+        console.log(result);
+        console.log(result.data)
+    } catch (error) {
+        console.error(error);
+    }
+})()
+```
+
+이렇게 되면 노드라는 글짜가 특수한 문자열로 변환되는데 이것을 받는 쪽에서는 decodeURIComponent를 사용하면 된다.
+
+### 데이터 속성과 dataset
+이 부분의 경우에는 dom 객체 생성을 공부하다 보면 알기 때문에 굳이 따로 설명할 필요는 없어서 생략한다.
+
+<hr>
+
+## 노드 기능
+
+### REPL
+자바스크립트는 스크립트 언어이므로 미리 컴파일을 하지 않아도 즉석에서 코드를 실행할 수 있다.
+브라우저의 콘솔 탭에서 자바스크립트 코드를 빙력할 수 있듯이 노드도 비슷한 콘솔을 제공하는데, 읽고, 해석하고, 결과물을 반환하고, 종료할 때까지 반복한다고 해서 REPL이라고 부른다.
+
+코드 에디터에서 터미널이나 명령 프롬프트를 켜서 node 라고 입력한다
+그러면 
+```
+$ node
+> 
+```
+이런식으로 나오게 되는데 이 때 자바스크립트 코드를 입력할 수 있다.
+
+이것 외에도 js 파일로 작성한 뒤에  node [자바스크립트 파일 경로]로 실행이 가능하다.
+
+### 모듈화
+노드는 코드를 모듈로 만들 수 있다는 점에서 브라우저의 자바스크립트와 다르다. 모듈이란 특정한 기능을 하는 함수나 변수들의 집합이다.
+
+모듈로 만들어두면 여러 프로그램에 해당 모듈을 재사용할 수 있다. 자바 스크립트에서 코드를 재사용하기 위해 함수로 만드는 것과 비슷하다.
+
+보통 파일 하나가 모듈 하나가 된다. 파일별로 코드를 모듈화할 수 있어 관리하기 편하다.
+
+var.js, func.js, index.js 이 세가지 파일들을 같은 폴더에 만든다.
+
+var.js
+```js
+const odd = '홀수입니다';
+const even = '짝수입니다';
+
+module.exports = {
+    odd,
+    even
+};
+```
+
+이렇게 선언된 var.js 를 참조하는 func.js는
+```js
+const {odd, even} = require('./var');
+
+function checkOddOrEven(num) {
+    if (num % 2) {
+        return odd;
+    }
+    return even;
+}
+
+module.exports = checkOddOrEven;
+```
+
+require 함수 안에 불러올 모듈의 경로를 적는다. 파일 경로에서는 js나 json 같은 확장자는 생략할 수 있다.
+
+index.js
+```js
+const {odd,even} = require('./var');
+const checkNumber = require('./func');
+
+function checkStringOddOrEven (str) {
+    if (str.length % 2) {
+        return odd;
+    }
+    return even;
+}
+
+console.log(checkNumber(10));
+console.log(checkStringOddOrEven('hello'))
+
+```
+
+이렇게 작성된 index.js를 실행해보면
+```
+$ node index
+짝수입니다
+홀수입니다
+```
+
+이러한 결과가 나온다. 따라서 여러파일에 걸쳐 재사용되는 함수나 변수를 모듈로 만들어두면 편리하다.
+
+<hr>
+
+## 노드 내장 객체
+
+### global 
+먼저 global 객체이다. 브라우저의 window 와 같은 전역 객체이다. 전역 객체이므로 모든 파일에서 접근할 수 있다. 또한 window.open 메서드를 그냥 open으로 호출할 수 있는 것처럼 global도 생략할 수 있다. 
+
+### console
+이 문서를 작성하면서, 이전에 프로젝트를 만들면서 사용했던 console도 노드에서는 window 대신 global 객체 안에 들어 있으며, 브라우저에서의 console과 거의 비슷하다.
+
+console 객체는 보통 디버깅을 위해 사용한다. 개발하면서 변수에 값이 제대로 들어 있는지 확인하기 위해 사용하고, 에러 발생 시 에러 내용을 콘솔에 표시하기 위해 사용하며, 코드 실행 시간을 알아보려고 할 때도 사용한다. 대표적으로 console.log 메서드가 있다.
+
+### 타이머
+타이머 기능을 제공하는 함수인 setTimeout, setInterval, setImmediate는 노드에서 window 대신 global 객체 안에 들어 있다. setTimeout과 setInterval은 웹 브라우저에서도 자주 사용되므로 익숙할 것이다.
+
+### __filename, __dirname
+노드에서는 파일 사이에 모듈 관계가 있는 경우가 많으므로 때로는 현재 파일의 경로나 파일 명을 알아야 한다. 노드는 __filename, __dirname 이라는 키워드로 경로에 대한 정보를 제공한다.
+
+파일에 __filename과 __dirname을 넣어두면 실행 시 현재 파일명과 현재 파일 경로로 바뀐다.
+
+경로는 사람마다의 경로가 다르기 때문에 /나 \같은 경로 구분자 문제도 있으므로 보통은 이를 해결해주는 path모듈과 함꼐 사용한다.
+
+### module, exports, require
+위의 코드들에서는 module.exports만 사용했는데, module 객체 말고 exports 객체로도 모듈을 만들 수 있다.
+아까 작성했던 var.js를 이렇게 수정해본다.
+```js
+exports.odd = '홀수입니다';
+exports.even = '짝수입니다';
+```
+이렇게 작성해도 index.js에서는 동일하게 불러올 수 있다.
+
+module.exports로 한 번에 대입하는 대신, 각각의 변수를 exports 객체에 하나씩 넣었다. 동일하게 동작하는 이유는 module.exports와 exports가 같은 객체를 참조하기 때문이다.
+
+모듈을 불러오는 require는 함수이고, 함수는 객체이므로 몇가지 속성을 가지고 있다.
+
+한 번 require 한 파일은 require.cache에 저장되므로 다음 번 require 할 때는 새로 불러오지 않고 require.cache에 있는 것이 재사용 된다.
+
+만약 새로 require 하기를 원한다면, require.cache의 속성을 제거하면 된다. 다만 꼬일 수 있기에 권장하지 않는다.
+
+require.main은 노드 실행 시 첫 모듈을 가리킨다.require.main 객체의 모양은 require.cache의 모듈 객체와 같다
+
+### process 
+process 객체는 현재 실행되고 있는 노드 프로세스에 대한 정보를 담고 있다. 
+
+- process.version : 설치된 노드의 버전
+- process.arch : 프로세서 아키텍처 정보
+- process.platform : 운영체제 플랫폼 정보
+- process.pid : 현재 프로세스의 아이디
+- process.uptime() : 프로세스가 시작된 후 흐른 시간
+- process.execPath : 노드의 경로
+- process.cwd() : 현재 프로세스가 실행되는 위치
+- process.cpuUsage() : 현재 cpu 사용량
+
+#### process.env
+REPL에 process.env를 입력하면 많은 정보들이 출력된다. 자세히 보면 시스템의 환경 변수임을 알 수 있는데 시스템 환경 변수는 노드에 직접 영향을 미치기도 한다. 대표적인 것으로 UV_THREADPOOL_SIZE 와 NODE_OPTIONS 가 있다.  
+
+```R
+NODE_OPTIONS=--max-old-spae-size=8192
+UV_THREADPOOL_SIZE-8
+```
+
+왼쪽이 환경 변수의 이름이고 오른쪽이 값이다.
+
+process.env는 서비스의 중요한 키를 저장하는 공간으로도 사용되기에 서버나 데이터베이스의 비밀번호와 각종 API 키를 코드에 직접 입력하는 것은 위험하다. 따라서 중요한 비밀번호는 process.env의 속성에
+```js
+const secretId = process.env.SECRET_ID;
+const secretCode = process.env.SECRET_CODE
+```
+
+#### process.exit()
+실행 중인 노드 프로세스를 종료한다. 서버 환경에서 이 함수를 사용하면 서버가 멈추므로 특수한 경우를 제외하고는 서버에서 잘 사용하지 않는다. 하지만 서버 외의 독립적인 프로그램에서는 수동으로 노드를 멈추기 위해 사용한다.
+
+<hr>
+
+## 노드 내장 모듈
+
+(교재 상) 노드의 모듈은 노드 버전마다 차이가 있습니다. 따라서 버전과 상관없이 안정적이고 유용한 기능을 지닌 모듈 위주로 설명하겠습니다. 공식 문서에 모두 나와 있는 내용이지만 중요하고 자주 사용하는 것들만 추렸습니다.
+
+### os
+웹 브라우저에 사용되는 자바스크립트는 운영체제의 정보를 가져올 수 없지만, 노드는 os 모듈에 정보가 담겨 있어 정보를 가져올 수 있다.
+
+- os.arch() : process.arch와 동일
+- os.platform() : process.platform과 동일
+- os.type() : 운영체제의 종류를 보여줌
+- os.uptime() : 운영체제 부팅 이후 흐른 시간을 보여준다.
+- os.hostname() : 컴퓨터의 이름을 보여줌
+- os.release() : 운영체제의 버전을 보여줌
+- os.homedir() : 홈 디렉터리 경로를 보여줌
+- os.tmpdir() : 임시 파일 저장 경로를 보여줌
+- os.cpus() : 컴퓨터의 코어 정보를 보여줌
+- os.freemem() : 사용 가능한 메모리를 보여줌
+- os.totalmem() : 전체 메모리 용량을 보여줌
+
+os 모듈은 주로 컴퓨터 내부 자원에 빈번하게 접근하는 경우 사용된다. 즉, 일반적인 웹 서비스를 제작할 때는 사용 빈도가 높지 않다. 하지만 운영체제별로 다른 서비스를 제공하고 싶을 때 os 모듈이 유용할 것이다.
+
+### path
+폴더와 파일의 경로를 쉽게 조작하도록 도와주는 모듈이다. path 모듈이 필요한 이유 중 하나는 운영체제별로 경로 구분자가 다르기 때문이다. 크게 윈도 타입과 posix 타입으로 구분된다. posix는 유닉스 기반의 운영체제들을 의미하면 맥과 리눅스가 속해있다.
+
+- 윈도우는 \ 가 아닌 / 로 구분
+- posix는 /가 아닌 \로 구분
