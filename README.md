@@ -517,9 +517,911 @@ const secretCode = process.env.SECRET_CODE
 - os.totalmem() : 전체 메모리 용량을 보여줌
 
 os 모듈은 주로 컴퓨터 내부 자원에 빈번하게 접근하는 경우 사용된다. 즉, 일반적인 웹 서비스를 제작할 때는 사용 빈도가 높지 않다. 하지만 운영체제별로 다른 서비스를 제공하고 싶을 때 os 모듈이 유용할 것이다.
+<hr>
 
 ### path
 폴더와 파일의 경로를 쉽게 조작하도록 도와주는 모듈이다. path 모듈이 필요한 이유 중 하나는 운영체제별로 경로 구분자가 다르기 때문이다. 크게 윈도 타입과 posix 타입으로 구분된다. posix는 유닉스 기반의 운영체제들을 의미하면 맥과 리눅스가 속해있다.
 
 - 윈도우는 \ 가 아닌 / 로 구분
 - posix는 /가 아닌 \로 구분
+
+- path.sep : 경로의 구분자, /\
+- path.delimiter : 환경 변수의 구분자, ; :
+- path.dirname() : 파일이 위치한 폴더 경로를 보여줌
+- path.extname() : 파일의 확장자를 보여줌
+- path.basname() : 파일의 이름을 표시함, 파일의 이름만 표시하고 싶다면 두 번째 인수로 파일의 확장자를 넣으면 된다.
+- path.parse() : 파일의 경로를 root, dir, base, ext, name으로 분리함
+- path.format() : path.parse()한 객체를 파일 경로로 합침
+- path.normalize() : /나 \를 실수로 여러 번 사용했더나 혼용했을 때 정상적인 경로로 변환함
+- path.isAbsolute() : 파일의 경로가 절대경로인지 상대경로인지를 true나 false로 알림
+- path.relative() : 경로를 두 개 넣으면 첫 번째 경로에서 두 번째 경로로 가는 방법을 알림
+- path.join() : 여러 인수를 넣으면 하나의 경로로 합침, 상대 경로인 ..과 .도 알아서 처리함
+- path.resolve() : path.join과 비슷하지만 좀 다른데 /를 만나면 resolve는 절대 경로로 인식해서 앞의 경로를 무시하고, join은 상대 경로로 처리한다.
+
+가끔 윈도에서 posix 스타일 경로를 사용할 때가 있고 그 반대일 때도 있는데 이 상황에서는 윈도에서 path.posix.sep이나 path.posix.join() 과 같이 사용하면 되고, posix에서는 path.win32.sep이나 path.win32.join()과 같이 사용하면 된다.
+
+노드는 require.main 파일을 기준으로 상대 경로를 인식한다. 따라서 require.main과는 다른 디렉터리의 파일이 상대 경로를 갖고 있다면 예상과 다르게 동작할 수 있다. 
+<hr>
+
+### url
+인터넷 주소를 쉽게 조작하도록 도와주는 모듈이다. url 처리에는 크게 두 가지 방식이 있다. 노드 버전 7에서 추가된 whatwg 방식의 url과 예전부터 노드에서 사용하던 방식의 url이 있다.
+
+기존 노드 방식에는 두 메서드를 사용하는데 
+- url.parse(주소) : 주소를 분해한다. whatwg 방식과 비교하면 username과 password 대신 auth 속성이 있고, searchParams 대신 query가 있다.
+- url.format(객체) : whatwg 방식 url과 기존 노드의 url을 모두 사용할 수 있다. 분해되었던 url 객체를 다시 원래 상태로 조립한다.
+
+whatwg와 노드의 url은 취향에 따라 사용하면 되지만, 노드의 url 형식을 꼭 사용해야 하는 경우가 있다. host 부분 없이 pathname 부분만 오는 주소인 경우에는 whatwg 방식이 처리할 수 없다.
+
+whatwg 방식은 search 부분을 searchParams라는 특수한 객체로 반환하므로 유용하다. search 부분은 보통 주소를 통해 데이터를 전달할 때 사용된다. search는 물음표로 시작하고, 그 뒤에 키=값 형식으로 데이터를 전달한다. 여러 키가 있을 경우에는 &로 구분한다.
+
+<br>
+searchParams
+
+```
+$node searchParams
+searchParams: URLSearchParams {
+    ''= > ''
+}
+```
+
+- getAll(키) : 키에 해당하는 모든 값들을 가져온다. category 키에는 nodejs와 javascript 라는 두 가지 값이 들어 있다.
+- get(키) : 키에 해당하는 첫 번째 값만 가져온다.
+- has(키) : 해당 키가 있는지 없는지를 검사한다.
+- keys() : searchParams의 모든 키를 반복기 객체로 가져온다.
+- values() : searchParams의 모든 값을 반복기 객체로 가져온다.
+- append(키, 값) : 해당 키를 추가한다. 같은 키의 값이 있다면 유지하고 하나 더 추가한다.
+- set(키, 값) : append와 비슷하지만, 같은 키의 값들을 모두 지우고 새로 추가한다
+- delete(키) : 해당 키를 제거한다.
+- toString : 조작한 searchParmas 객체를 다시 문자열로 만든다. 이 문자열을 search에 대입하면 주소 객체에 반영된다.
+<hr>
+
+### queryString
+- querystring.parse(쿼리) : url의 query 부분을 자바스크립트 객체로 분해한다.
+- querystring.stringfy(객체) : 분해된 query 객체를 문자열로 다시 조립한다.
+<hr>
+
+### crypto
+다양한 방식의 암호화를 도와주는 모듈이다. 
+
+#### 단방향 암호화
+(교재상)
+비밀번호는 보통 단방향 암호화 알고리즘을 사용해서 암호화한다. 단방향 암호화란 복호화할 수 없는 암호화 방식을 뜻한다. 복호화는 암호화된 문자열을 원래 문자열로 되돌려놓는 것을 의미한다. 즉, 단방향 암호화는 한 번 암호화하면 원래 문자열을 찾을 수 없다. 복호화할 수 없으므로 암호화라고 표현하는 대신 해시 함수라고 부르기도 한다.
+
+단방향 암호화 알고리즘은 주로 해시 기법을 사용한다. 해시 기법이란 어떠한 문자열을 고정된 길이의 다른 문자열로 바꿔버리는 방식이다. 입력 문자열의 길이는 다르지만 출력 문자열의 길이는 네 자리로 고정되어 있다.
+
+- createHash(알고리즘) : 사용할 해시 알고리즘을 넣는다. md5, sha1, sha256, sha512 ㅍ등이 가능하지만, md5와 sha1은 이미 취약점이 발견되었다. 현재는 sha512 정도로 충분하지만 나중에 이것마저도 취약해지면 더 강화된 알고리즘으로 바꿔야 한다.
+- update(문자열) : 변환할 문자열을 넣는다.
+- digest(인코딩) : 인코딩할 알고리즘을 넣는다. base64, hex, latin1이 주로 사용되는데, 그 중 base64가 결과 문자열이 가장 짧아 애용된다. 결과물로 변환된 문자열을 반환한다.
+
+가끔 nopqrst라는 문자열이 qvew로 변환되어 abcdefgh를 넣었을 떄와 똑같은 출력 문자열로 바뀔 떄도 있다. 이런 상황을 충돌이 발생했다고 표현한다. 해킹용 컴퓨터의 역할은 어떠한 문자열이 같은 출력 문자열을 반환하는지 찾아내느 것이다. 여러 입력 문자열이 같은 출력 문자열로 변환될 수 있으므로 비밀번호를 abcdefgh로 설정했어도 nopqrst로 뚫리는 사태가 발생하게 된다. 
+
+현재는 주로 pbkdf2나 bcrypt, scrypt라는 알고리즘으로 비밀번호를 암호화하고 있다. 그 중 노드에서 지원하는 pbkdf2는 간단히 말하면 기존 문자열에 salt라고 불리는 문자열을 붙인 후 해시 알고리즘을 반복해서 적용하는 것이다. 
+
+#### 양방향 암호화
+양방향 대칭형 암호화, 암호화된 문자열을 복호화할 수 있으며, 키라는 것이 사용된다. 대칭형 암호화에서 암호를 복호화하려면 암호화할 때 사용한 키와 같은 키를 사용해야 한다.
+
+- cipher.update(문자열, 인코딩, 출력 인코딩) : 암호화할 대상과 대상의 인코딩, 출력 결과물의 인코딩을 넣는다. 보통 문자열은 utf8인코딩을, 암호는 base64를 많이 사용한다.
+- cipher.final(출력 인코딩) : 출력 결과물의 인코딩을 넣으면 암호화가 완료된다.
+- crypto.createDecipheriv(알고리즘, 키, iv) : 복호화할 때 사용한다. 암호화할 때 사용했던 알고리즘과 키, iv를 그대로 넣어야 한다.
+- decipher.update(문자열, 인코딩, 출력 인코딩) : 암호화된 문장, 그 문장의 인코딩, 복호화할 인코딩을 넣는다. createCipherive의 update에서 utf8, base64 순으로 넣었다면 createDecipheriv의 update() 에서는 base64, utf8순으로 넣으면 된다.
+- decipher.final(출력 인코딩) : 복호화 결과물의 인코딩을 넣는다.
+
+<hr>
+
+### util
+util.. 이름처럼 각종 편의 기능을 모아둔 모듈이다.
+
+- util.deprecate : 함수가 deprecated 처리 되었음을 알린다. 첫 번째 인수로 넣은 함수를 사용했을 때 경고 메시지가 출력된다. 두 번째 인수로 경고 메시지 내용을 넣으면 된다. 함수가 조만간 사라지거나 변경될 때 알려줄 수 있어 유용하다.
+- util.promisify : 콜백 패턴을 프로미스 패턴으로 바꾼다. 바꿀 함수를 인수로 제공하면 된다. 이렇게 바꿔두면 async/await 패턴까지 사용할 수 있어 좋다.
+
+<hr>
+
+### worker_threads
+
+노드에서 멀티 스레드 방식으로 작업하는 방법은 worker_threads 모듈을 이용하면 된다.
+
+```js
+const {
+    Worker, isMainThread, parentPort
+} = require('worker_threads');
+
+if (isMainThread) {
+    const worker = new Worker(__filename);
+    worker.on('message', message => console.log('from worker', message));
+    worker.on('exit', ()=> console.log('worker exit')));
+    worker.postMessage('ping')
+} else {
+    parentPort.on('message', (value) => {
+        console.log('from parent', value);
+        parentPort.postMesage('pong');
+        parentPort.close();
+    })
+}
+```
+
+isMainThread 를 통해 현재 코드가 메인 스레드에서 실행되는지, 아니면 우리가 생성한 워커 스레드에서 실행되는지 구분된다. 메인 스레드에서는 new Worker 를 통해 현재 파일을 워커 스레드에서 실행시키고 있다. 물론 현재 파일의 else 부분만 워커 스레드에서 실행된다.
+
+부모에서는 워커 생성 후 worker.postMessage로 워커에 데이터를 보낼 수 있다. 워커는 parentPort.on('message') 이벤트 리스너로 부모로부터 메시지를 받고, parentPort.postMessage 로 부모에게 메시지를 보낸다. 부모는 worker.on('message')로 메시지를 받는다. 
+
+워커에서 on 메서드를 사용할 때는 직접 워커를 종료해야 한다는 점에 주의해야 한다. parentPort.close() 를 하면 부모와의 연결이 종료된다. 
+
+<hr>
+
+### child_process
+노드에서 다른 프로그램을 실행하고 싶거나 명령어를 수행하고 싶을 때 사용하는 모듈이다. 이 모듈을 통해 다른 언어의 코드를 실행하고 결괏값을 받을 수 있다. 이름이 child_process 인 이유는 현재 노드 프로세스 외에 새로운 프로세스를 띄워서 명령을 수행하고, 노드 프로세스에 결과를 알려주기 때문이다.
+
+<hr>
+
+### 기타 모듈들
+
+- assert : 값을 비교하여 프로그램이 제대로 동작하는지 테스트하는데 사용한다.
+- dns : 도메인 이름에 대한 ip 주소를 얻어내는데 사용한다.
+- net : http보다 로우 레벨인 tcp나 ipc 통신을 할 때 사용한다.
+- string_decode: 버퍼  데이터를 문자열로 바꾸는데 사용한다.
+- tls : tls와 ssl에 관련된 작업을 할 때 사용한다.
+- tty : 터미널과 관련된 작업을 할 때 사용한다.
+- dgram : udp와 관련된 작업을 할 때 사용한다.
+- v8 : v8 엔진에 직접 접근할 때 사용한다.
+- vm : 가상 머신에 직접 접근할 때 사용한다.
+
+<hr>
+
+## 파일 시스템 접근하기
+
+fs 모듈은 파일 시스템에 접근하는 모듈이다. 즉, 파일을 생성하거나 삭제하고, 읽거나 쓸 수 있다. 폴더도 만들거나 지울 수 있다. 웹 브라우저에서 자바스크립트를 사용할 때는 일부를 제외하고는 파일 시스템 접근이 금지되어 있으므로 노드의 fs 모듈이 낯설 것이다.
+
+예
+```js
+const fs = require('fs')
+
+fs.readFile('./readme.txt', (err, data) => {
+    if (err) {
+        throw err;
+    }
+    console.log(data);
+    console.log(data.toString())
+})
+```
+
+fs 모듈을 불러온 뒤 읽을 파일의 경로를 지정한다. 여기서는 파일의 경로가 현재 파일 기준이 아니라 node 명령어를 실행하는 콘솔 기준이라는 점에 유의해야 한다. 지금은 크게 상관없으나 폴더 내부에 들어 있는 파일을 실행할 때 경로 문제가 발생할 수 있다.
+
+파일을 읽은 후에 실행될 콜백 함수도 readFile 메서드의인수로 같이 넣습니다. 이 콜백 함수의 매개변수로 에러 또는 데이터를 받는다. 파일을 읽다가 무슨 문제가 생겼다면 에러가 발생할 것이고, 정상적으로 읽었다면 해당 파일의 내용이 나올 것이다.
+
+여기서 console.log(data) 의 경우에는 Buffer 라는 이상한 것이 출력된다.
+```
+<Buffer ec a0 80 eb a5 bc 20 ec ...>
+```
+이런식으로 출력이되서 toString()을 붙여서 로그를 찍습니다. readFile의 결과물은 버퍼라는 형식으로 제공된다. fs는 기본적으로 콜백 형식의 모듈이므로 실무에서 사용하기 불편하다. 따라서 fs 모듈을 프로미스 형식으로 바꿔주는 방법을 사용한다.
+
+```js
+const fs = require('fs').promises
+
+fs.readFile('./readme.txt')
+.then((data) => {
+    console.log(data);
+    console.log(data.toString());
+})
+.catch((err) => {
+    console.error(err);
+})
+```
+
+이렇게 하면 promise 기반의 fs 모듈을 사용할 수 있게 된다. 이번에는 파일을 만들어보겠다.
+
+```js
+const fs = require('fs').promises;
+
+fs.writeFile('./writeme.txt', '글이 입력됩니다')
+.then(()=> {
+    return fs.readFile('./writeme.txt');
+})
+.then((data) => {
+    console.log(data.toString())
+})
+.catch((err) => {
+    console.error(err)
+})
+```
+
+<hr>
+
+### 동기 메서드와 비동기 메서드
+setTimeout 같은 타이머와 process.nextTick 외에도, 노드는 대부분의 메서드를 비동기 방식으로 처리한다. 하지만 몇몇 메서드는 동기 방식으로도 사용할 수 있다. 특히 fs 모듈이 그러한 메서드를 많이 가지고 있다.
+
+```js
+const fs = require('fs')
+console.log("시작")
+fs.readFile('./readme.txt', (err, data) => {
+    if (err) {
+        throw err;
+    }
+    console.log("1번", data.toString())
+})
+fs.readFile('./readme.txt', (err, data) => {
+    if (err) {
+        throw err;
+    }
+    console.log("2번",data.toString())
+})
+fs.readFile('./readme.txt', (err, data) => {
+    if (err) {
+        throw err;
+    }
+    console.log("3번",data.toString())
+})
+fs.readFile('./readme.txt', (err, data) => {
+    if (err) {
+        throw err;
+    }
+    console.log("4번",data.toString())
+})
+console.log("끝")
+```
+
+이런식으로 작성을 하면 시작과 끝을 제외하고는 결과의 순서가 다를 수 있다.
+
+비동기 메서드들은 백그라운드에 해당 파일을 읽으라고만 요청하고 다음 작업으로 넘어간다.
+따라서 파일 읽기 요청만 세 번 보내고 console.log('끝')을 찍는다. 나중에 읽기가 완료되면 백그라운드가 다시 메인 스레드에 알린다. 그 상태에서 등록된 콜백 함수를 실행하는 것이다.
+
+이 방식은 상당히 좋다. 수백 개의 I/O 요청이 들어와도 메인 스레드는 백그라운드에 요청 처리를 위임한다. 그 후로도 얼마든지 요청을 더 받을 수 있다. 나중에 처리가 완료되면 그때 콜백 함수를 처리하면 되기 때문이다.
+
+순서대로 찍고 싶다면 
+
+```js
+const fs = require('fs')
+console.log("시작")
+let data = fs.eadFileSync('./readme.txt');
+console.log('1번', data.toString())
+data = fs.eadFileSync('./readme.txt');
+console.log('2번', data.toString())
+data = fs.eadFileSync('./readme.txt');
+console.log('3번', data.toString())
+data = fs.eadFileSync('./readme.txt');
+console.log('4번', data.toString())
+console.log("끝")
+```
+
+readFile 대신 readFileSync를 사용하면 되는데 콜백 함수를 넣는 대신 직접 return 값을 받아온다. 
+
+하지만 readFileSync를 사용하면 요청이 수백 개 이상 들어올 때 성능에 문제가 생긴다. 이전 작업이 완료되어야 다음 작업을 진행하기에 이전 작업이 진행 되기 전까지는 아무것도 하지 못하고 대기하고 있어야 하는 것이다. 백그라운드는 fs 작업을 동시에 처리할 수도 있는데, Sync 메서드를 사용하면 백그라운드조차 동시에 처리할 수 없게 된다. 비동기 fs 메서드를 사용하면 백그라운드가 동시에 작업할 수도 있고, 메인 스레드는 다음 작업을 처리할 수 있다.
+
+동기 메서드들은 이름 뒤에 Sync 가 붙어 있어 구분하기 쉽다. writeFileSync 도 있다. 하지만 동기 메서드를 사용해야 하는 경우는 극히 드물다. 프로그램을 처음 실행할 때 초기화용도로만 사용하는 것을 권장한다.
+
+그렇다면 비동기 방식으로 하는데 순서를 유지하고 싶다면 이전 readFile의 콜백에 다음 readFile을 넣으면 된다. 이런식으로 작성하면 콜백 지옥이 펼쳐지지만 순서는 제대로 찍히게 됩니다.
+
+물론 콜백 지옥도 async/await로 어느정도 해결할 수 있다. 지
+
+<hr>
+ 
+### 버퍼와 스트림 이해
+
+파일을 읽거나 쓰는 방식에는 크게 두 가지 방식, 즉 버퍼를 이용하는 방식과 스트림을 이용하는 방식이 있다. 버퍼링과 스트리밍이라는 용어를 알텐데 영상을 로딩할 때는 버퍼링이라고 하고, 영상을 실시간으로 송출할 때는 스트리밍이라고 한다.
+
+버퍼링은 영상을 재생할 수 있을 떄까지 데이터를 모으는 동작이고, 스트리밍은 영상 데이터를 조금씩 전소앟는 동작이다.
+
+노드의 버퍼와 스트림도 비슷한 개념이다. 앞에서 작성했던 것은 버퍼 형식으로 출력되었었다. 노드는 파일을 읽을 때 메모리에 파일 크기만큼 공간을 마련해두며 파일 데이터를 메모리에 저장한 뒤 사용자가 조작할 수 있도록 한다. 이때 메모리에 저장된 데이터가 바로 버퍼이다.
+
+- from(문자열) : 문자열을 버퍼로 바꿀 수 있다. length 속성은 버퍼의 크기를 알린다. 바이트 단위이다.
+- toString(버퍼) : 버퍼를 다시 문자열로 바꾼다.
+- concat(배열) : 배열 안에 든 버퍼들을 하나로 합친다.
+- alloc(바이트) : 빈 버퍼를 생성한다. 바이트를 인수로 너흥면 해당 크기의 버퍼가 생성된다.
+
+readFile 방식의 버퍼가 편리하기는 하지만 문제점도 있다. 만약 용량이 100mb인 파일이 있으면 읽을 때 메모리에 100mb의 버퍼를 만들어야 한다. 이런 작업을 10개만 해도 1gb이다. 서버처럼 몇 명이 이용할지 모르는 환경에서는 메모리 문제가 발생할 수 있기에 버퍼의 크기를 작게 만든 후 여러 번으로 나눠 보내는 방식이 등장했다. 1mb 버퍼를 만든 후 100mb 파일을 100번 나눠 보내는 것이다. 이를 편리하게 만든 것이 스트림이다.
+
+파일을 읽는 스트림 메서드로는 createReadStream이 있다.
+
+```js
+const fs = require('fs')
+
+const readStream = fs.createReadStream('./readme3.txt', {highWaterMark:16})
+const data = [];
+
+readStream.on('data', (chunk) => {
+    data.push(chunk);
+    console.log('data : ', chunk, chunk.length)
+})
+
+readStream.on('end', () => {
+    console.log('end :', Buffer.concat(data).toString());
+});
+
+readStream.on('error', (err) => {
+    console.log('error :', err)
+})
+```
+
+먼저 createReadStream으로 읽기 스트림을 만든다. 첫 번쨰 인수로 읽을 파일 경로를 넣는다. 두 번째 인수는 옵션 객체인데 highWaterMark라는 옵션이 버퍼의 크기를 정할 수 있는 옵션이다. 기본값은 64kb이지만, 여러 번 나눠서 보내는 모습을 보여주기 위해 16b로 낮췄다.
+
+readStream은 이벤트 리스너를 붙여서 사용한다. 보통 data, end, error 이벤트를 사용한다.
+
+위 예제의 readStream.on('data') 와 같이 이벤트 리스너를 붙이면 된다. 파일을 읽는 도중 에러가 발생하면 error 이벤트가 호출되고, 파일 읽기가 시작되면 data 이벤트가 발생한다. 16b씩 읽도록 설정했으므로 파일의 크기가 16b보다 크다면 여러 번 발생할 수도 있다. 파일을 다 읽으면 end 메서드로 종료를 알린다. 이때 finish 이벤트가 발생한다. 
+
+createReadStream으로 파일을 읽고 그 스트림을 전달받아 createWriteStream으로 파일을 쓸 수도 있다. 파일 복사와 비슷하다. 스트림끼리 연결하는 것을 '파이핑한다'고 표현한다. 액체가 흐르는 관처럼 데이터가 흐른다고 해서 지어진 이름이다.
+
+미리 읽기 스트림과 쓰기 스트림을 만들어둔 후 두 개의 스트림 사이를 pipe 메서드로 연결하면 저절로 데이터가 writeStream으로 넘어간다. pipe는 스트림 사이에 여러 번 연결할 수 있다. 다음 코드는 파일을 읽은 후 gzip 방식으로 압축하는 코드이다.
+
+```js
+const zlib = require('zlib');
+const fs = require('fs');
+
+const readStream = fs.createReadStream('./readme.txt');
+const zlibStream = zlib.createGzip();
+const writeStream = fs.createWriteStream('./readme.txt.gz');
+readStream.pipe(zlibStream).pipe(writeStream);
+```
+
+노드에서는 파일을 압축하는 zlib라는 모듈도 제공한다. zlib의 createGzip이라는 메서드가 스트림을 지원하므로 readStream과 writeStream 중간에서 파이핑 할 수 있다. 버퍼 데이터가 전달되다가 gzip압축을 거친 후 파일로 써진다.
+
+### 기타 fs 메서드 알아보기
+위에서는 단순히 파일 읽기/쓰기를 했지만, 파일을 생성하고 삭제할 수 있으며 폴더를 생성하고 삭제할 수도 있다.
+
+- fs.access(경로, 옵션, 콜백) : 폴더나 파일에 접근할 수 있는지를 체크한다. 두 번째 인수로 상수들을 넣었다. F_OK 는 파일 존재 여부, R_OK는 읽기 권한 여부, W_OK는 쓰기 권한 여부를 체크한다. 파일/폴더나 권한이 없다면 에러가 발생하는데 파일/폴더가 없을 떄의 에러 코드는 ENOENT 이다.
+- fs.mkdir(경로, 콜백) : 폴더를 만드는 메서드이다. 이미 폴더가 있다면 에러가 발생하므로 먼저 access 메서드를 호출해서 확인하는 것이 중요하다.
+- fs.open(경로, 옵션, 콜백) : 파일의 아이디를 가져오는 메서드이다. 파일이 없다면 파일을 생성한 뒤 그 아이디를 가져온다. 가져온 아이디를 사용해 fs.read나 fs.write로 읽거나 쓸 수 있다. 두 번째 인수로 어떤 동작을 할 것인지를 설정할 수 있다. 쓰려면 w, 읽으려면 r, 기존 파일에 추가하려면 a이다. 
+- fs.rename(기존 경로, 새 경로, 콜백) : 파일의 이름을 바꾸는 메서드이다. 기존 파일 위치와 새로운 파일 위치를 적으면 된다. 꼭 같은 폴더를 지정할 필요는 없으므로 잘라내기 같은 기능을 할 수 있다.
+- fs.readdir(경로, 콜백) : 폴더 안의 내용물을 확인할 수 있다. 배열 안에 내부 파일과 폴더명이 나온다.
+- fs.unlink(경로, 콜백) : 파일을 지울 수 있다. 파일이 없다면 에러가 발생하므로 먼저 파일이 있는지를 꼭 확인해야 한다. 
+- fs.rmdir(경로, 콜백) : 폴더를 지울 수 있다. 폴더 안에 파일들이 있다면 에러가 발생하므로 먼저 내부 파일을 모두 지우고 호출해야 한다.
+
+<hr>
+
+### 스레드풀
+비동기 메서드들은 백그라운드에서 실행되고, 실행된 후에는 다시 메인 스레드의 콜백 함수나 프로미스의 then 부분이 실행된다. 이때 fs 메서드를 여러 번 실행해도 백그라운드에서 동시에 처리되는데 바로 스레드풀이 있기 때문이다.
+
+교재 (157쪽) 스레드풀 개수만큼 작업을 동시에 처리한다.
+
+스레드풀을 직접 컨트롤할 수는 없지만 개수를 조절할 수는 있다.
+윈도우라면 set uv_threadpool_size=1을, 맥과 리눅스는 터미널에 uv_threadpool_size=1을 입력한 후 다시 node threadpool을 입력하면 작업이 순서대로 실행될 것이다. 스레드의 개수를 8로 두면 또 다른 결과가 발생할 것이다. 숫자를 크게 할 때는 자신의 컴퓨터 코어 개수와 같거나 많게 두어야 뚜렷한 효과가 발생한다.
+
+<hr>
+
+## 이벤트 이해하기
+
+스트림을 배울 때 on('data', 콜백) 또는 on('data', 콜백) 을 사용했다. 바로 data라는 이벤트와 end라는 이벤트가 발생할 때 콜백 함수를 호출하도록 이벤트를 등록한 것이다. createReadStream 같은 경우는 내부적으로 알아서 data와 end 이벤트를 호출하지만, 우리가 직접 이벤트를 만들 수도 있다.
+
+event 모듈을 사용하면 된다. 객체는 이벤트 관리를 위한 메서드를 가지고 있다
+- on(이벤트명, 콜백) : 이벤트 이름과 이벤트 발생 시의 콜백을 연결한다. 이렇게 연결하는 동작을 이벤트 리스닝이라고 부른다. event2 처럼 이벤트 하나에 이벤트 여러 개를 달아줄 수도 있다.
+- addListener(이벤트명, 콜백) : on과 기능이 같다.
+- emit(이벤트명) : 이벤트를 호출하는 메서드이다. 이벤트 이름을 인수로 넣으면 미리 등록 해뒀던 이벤트 콜백이 실행된다.
+- once(이벤트명, 콜백) : 한 번만 실행되는 이벤트이다.
+- removeAllListeners(이벤트명) : 이벤트에 연결된 모든 이벤트 리스너를 제거한다.
+- removeListener(이벤트명, 리스너) : 이벤트에 연결된 리스너를 하나씩 제거한다. 리스너를 넣어야 한다는 것은 잊지말아야 한다.
+- off(이벤트명, 콜백) : 노드 10 버전에서 추가된 메서드로, removeListener와 기능이 같다.
+- listenerCount(이벤트명) : 현재 리스너가 몇 개 연결되어 있는지 확인한다.
+
+위에서 정리한 개념들만으로도 서버를 만들기 충분하지만 서버를운영할 때 코드에 에러가 발생하는 것은 치명적이므로, 마지막으로 에러를 처리하는 방법을 공부하겠다.
+
+<hr>
+
+## 예외 처리
+(교재상으로) 
+노드에서는 예외 처리가 정말 중요하다. 예외란 보통 처리하지 못한 에러를 가리킨다. 이러한 예외들은 실행 중인 노드 프로세스를 멈추게 한다. 
+
+멀티 스레드 프로그램에서는 스레드 하나가 멈추면 그 일을 다른 스레드가 대신합니다. 하지만 노드의 메인 스레드는 하나뿐이므로 그 하나를 소중히 보호해야 합니다. 메인 스레드가 에러로 인해 멈춘다는 것은 스레드를 갖고 있는 프로세스가 멈춘다는 뜻이고, 전체 서버도 멈춘다는 뜻과 같습니다. 아무리 신중을 기해 만들었다고 해도 항상 예기치 못한 에러는 발생하는 법입니다.
+
+따라서 예러를 처리하는 방법을 익혀두어야 합니다. 에러 로그가 기록되더라도 작업은 계속 진행될 수 있도록 말입니다.
+
+문법상의 에러는 없다고 가정하겠습니다. 실제 배포용 코드에 문법 에러가 있어서는 안됩니다.
+
+에러가 발생할 것 같은 부분을 try/catch문으로 감싸면 된다.
+```js
+setInterval(()=>{
+    console.log('start')
+    try {
+        throw new Error('broken server!')
+    } catch (err){
+        console.error(err)
+    }
+}, 1000);
+```
+
+setInterval을 사용한 것은 프로세스가 멈추는지 여부를 체크하기 위해서이다. 프로세스가 에러로 인해 멈추면 setInterval도 멈출 것이다. setInterval 내부에 throw new Error()를 써서 에러를 강제로 발생 시켰다.
+에러는 발생하지만 try/catch로 잡을 수 있고 setInterval도 직접 멈추기 전까지 계속 실행된다. 이렇게 에러가 발생할 것 같은 부분을 미리 try/catch로 감싸면 된다.
+
+이번에는 노드 자체에서 잡아주는 에러를 알아보겠다.
+```js
+const fs = require('fs');
+
+setInterval(() => {
+    fs.unlink('./abcdefg.js', (err) => {
+        if(err) {
+            console.error(err)
+        }
+    })
+}, 1000)
+```
+
+fs.unlink로 존재하지 않는 파일을 지우고 있다. 에러가 발생하지만 다행히 노드 내장 모듈의 에러는 실행중인 프로세스를 멈추지 않는다. 에러 로그를 기록해두고 나중에 원인을 찾아 수정하면 된다. 프로밍스의 에러는 catch하지 않아도 알아서 처리된다.
+
+다만 프로미스의 에러를 알아서 처리하는 동작은 노드 버전이 올라감에 따라 바뀔 수 있다. 따라서 프로미스를 사용할 때는 항상 catch를 붙여주는 것을 권장한다.
+
+uncaughtException 은 단순히 에러 내용을 기록하는 정도로 사용하고, 에러를 기록한 후 process.exit() 으로 프로세스를 종료하는 것이 좋습니다. 에러가 발생하는 코드를 수정하지 않는 이상, 프로세스가 실행되는 동안 에러는 계속 발생할 것이다.
+<hr>
+
+### 자주 발생하는 에러들
+- node : command not found : 노드를 설치했지만 이 에러가 발생하는 경우에는 환경 변수가 제대로 설정되지 않은 것이다. 환경 변수에는 노드가 설치된 경로가 포함되어야 한다. 
+- ReferenceError : 모듈 is not defined : 모듈을 require 했는지 확인
+- Error : Cannot find module 모듈명 : 해당 모듈을 require 했지만 설치하지 않았다. npm i 로 설치하시오
+- Error : Can't set headers after they are sent : 요청에 대한 응답을 보낼 때 응답을 두 번 이상 보냈다. 요청에 대한 응답은 한 번만 보내야 ㅏㄴ다. 응답을 보내는 메서드를 두 번 이상 사용하지 않았는지 체크해봐야한다.
+- 이 외의 것들은 교재 165쪽에 있다.
+
+<hr>
+<br>
+
+# http 모듈로 서버 만들기
+
+이번 챕터에서는 실제로 돌아가는 서버를 만든다.
+
+## 요청과 응답 이해하기
+서버는 클라이언트가 있기에 동작한다. 클라이언트에서 서버로 요청을 보내고, 서버에서는 요청의 내용을 읽고 처리한 뒤 클라이언트에 응답을 보낸다. 
+
+따라서 서버에는 요청을 받는 부분과 응답을 보내는 부분이 있어야 한다. 요청과 응답은 이벤트 방식이라고 생각하면 된다. 클라이언트로부터 요청이 왔을 때 어떤 작업을 수행할지 이벤트 리스너를 미리 등록해둬야 한다.
+
+createServer.js
+```js
+const http = require('http');
+
+http.createServer((req, res)=>{
+    
+})
+```
+
+http 서버가 있어야 웹 브라우저의 요청을 처리할 수 있으므로 http 모듈을 사용했다. http 모듈에는 createServer 메서드가 있다. 인수로 요청에 대한 콜백 함수를 넣을 수 있으며, 요청이 들어올 때마다 매번 콜백 함수가 실행된다. 따라서 이 콜백 함수에 응답을 적으면 된다.
+
+createServer를 보면 req 와 res 매개변수가 있다. req객체는 요청에 관한 정보들을, res 객체는 요청에 관한 정보들을, res 객체는 응답에 관한 정보들을 담고 있다.
+
+server1.js
+```js
+const http = require('http');
+
+http.createServer((req, res)=>{
+    res.writeHead(200, {'Content-Type' : 'text/html; charset=utf-8'});
+    res.write('<h1>Hello Node!</h1>');
+    res.end('<p>Hello Server!</p>');
+})
+
+.listen(8080, () => {
+    console.log('8080번 포트에서 서버 대기 중입니다.');
+})
+```
+
+```
+$ node server1
+```
+
+터미널 혹은 cmd 창에 위 텍스트를 입력하면 서버가 실행된다. 서버를 종료하려면 Control+ c 누르면 된다. 
+
+res 객체에는 res.writeHead와 res.write, res.end 메서드가 있다. res.writeHead는 응답에 대한 정보를 기록하는 메서드이다. 첫 번째 인수로 성공적인 요청임을 의미하는 200을, 두 번째 인수로 응답에 대한 정보를 보내는데 콘텐츠의 형식이 html 임을 알리고 있다. 또한 한글 표시를 위해 charset을 utf-8로 지정했다. 이 정보가 기록되는 부분을 헤더라고 부른다.
+
+res.write 메서드의 첫 번째 인수는 클라이언트로 보낼 데이터이다. 지금은 html 모양의 문자열을 보냈지만 버퍼를 보낼 수도 있다. 또한 여러 번 호출해서 데이터를 여러 개 보내도 된다. 데이터가 기록되는 부분을 본문이라고 부른다.
+
+res.end는 응답을 종료하는 메서드이다. 만약 인수가 있다면 그 데이터도 클라이언트로 보내고 응답을 종료한다. 따라서 위의 예제는 res.write에서 h1 태그로 작성된 hello node 문자열을, res.end에서 hello server 문자열을 클라이언트로 보낸 후 응답이 종료된 것이다. 브라우저는 응답 내용을 받아서 렌더링 한다.
+
+listen 메서드에 콜백 함수를 넣는 대신, 다음과 같이 서버에 listening 이벤트 리스너를 붙여도 된다. 추가로 error 이벤트 리스너도 붙여보겠다.
+
+server1-1.js
+```js
+const http = require('http');
+
+http.createServer((req, res)=>{
+    res.writeHead(200, {'Content-Type' : 'text/html; charset=utf-8'});
+    res.write('<h1>Hello Node!</h1>');
+    res.end('<p>Hello Server!</p>');
+})
+
+.listen(8080);
+
+server.on('listening', ()=>{
+    console.log("8080번 포트에서 서버 대기중 입니다")
+})
+
+server.on('error', (error) => {
+    console.error(error);
+})
+```
+
+한 번에 여러 서버를 실행할 수도 있다. createServer를 원하는 만큼 호출하면 되는것이다.
+
+server2.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node 웹 서버</title>
+</head>
+<body>
+    <h1>Node js 웹 서버</h1>
+    <p>만들 준비 완료</p>
+</body>
+</html>
+```
+
+server2.js
+```js
+const http = require('http');
+const fs = require('fs').promises;
+
+http.createServer(async (req, res) => {
+    try {
+        const data = await fs.readFile('./server2.html');
+        res.writeHead(200, {'Content-Type': 'text/html; charset=utf8'});
+        res.end(data);
+    } catch (error) {
+        console.error(error);
+        res.writeHead(500, {'Content-Type': 'text/plain; charset=utf8'});
+        res.end(error.message);
+    }
+})
+
+.listen(8080, () => {
+    console.log('8080번 포트에서 서버 대기 중입니다.');
+})
+```
+
+요청이 들어오면 fs모듈로 html 파일을 읽습니다. data 변수에 저장된 버퍼를 그대로 클라이언트에 보내면 된다. 이전 예제에서는 문자열을 보냈지만 저렇게 버퍼를 보낼 수도 있다. 예기치 못한 에러가 발생한 경우에는 에러 메시지를 응답한다. 에러 메시지는 일반 문자열이므로 text/plain을 사용했다.
+
+<hr>
+
+### rest와 라우팅 사용하기
+서버에 요청을 보낼 때는 주소를 통해 요청의 내용을 표현한다.
+
+요청의 내용이 주소를 통해 표현되므로 서버가 이해하기 쉬운 주소를 사용하는 것이 좋다. 여기서 rest가 등장한다.
+
+rest 는 REpresentational State Transfer의 줄임말이며, 서버의 자원을 정의하고 자원에 대한 주소를 지정하는 방법을 가리킨다. 일종의 약속이라고 봐도 무방하다. 자원이라고 해서 꼭 파일일 필요는 없고 서버가 행할 수 있는 것들을 통틀어서 의미한다고 보면 된다. REST API에는 많은 규칙들이 있는데 다 지키는 것은 현실적으로 어렵다.
+
+주소는 의미를 명확히 전달하기 위해 명사로 구성된다. /user이면 사용자 정보에 관련된 자원을 요청하는 것이고, /post라면 게시글에 관련된 자원을 요청하는 것이라고 추측 가능하다.
+
+단순한 명사만 있으면 무슨 동작을 행하라는 것인지 알기 어려우니 REST에서는 주소 외에도 HTTP 요청 메서드라는 것을 사용한다. 폼 데이터를 전송할 때 get 또는 post 메서드를 지정하는데 이 두가지가 요청 메서드 중의 하나이다.
+
+- GET : 서버 자원을 가져오고자 할 때 사용한다. 요청의 본문에 데이터를 넣지 않는다. 데이터를 서버로 보내야 한다면 쿼리스트링을 사용한다.
+- POST : 서버에 자원을 새로 등록하고자 할 때 사용한다. 요청의 본문에 새로 등록할 데이터를 넣어 보낸다.
+- PUT : 서버의 자원을 요청에 들어 있는 자원으로 치환하고자 할 떄 사용한다. 요청의 본문에 치환할 데이터를 넣어 보낸다.
+- PATCH : 서버 자원의 일부만 수정하고자 할 때 사용한다. 요청의 본문에 일부 수정할 데이터를 넣어 보낸다.
+- DELETE : 서버의 자원을 삭제하고자 할 때 사용하낟. 요청의 본문에 데이털르 넣지 않는다.
+- OPTIONS : 요청을 하기 전에 통신 옵션을 설명하기 위해 사용한다.
+
+이렇게 주소와 메서드만 보고 요청의 내용을 알아볼 수 있다는 것이 장점이다. 또한, GET 메서드 같은 경우에는 브라우저에서 캐싱할 수도 있으므로 같은 주소로 GET 요청을 할 때 서버에서 가져오는 것이 아니라 캐시에서 가져올 수도 있다. 이렇게 캐싱이 되면 성능이 좋아진다.
+
+그리고 HTTP 통신을 사용하면 클라이언트가 누구든 상관없이 같은 방식으로 서버와 소통할 수 있다. 즉 서버와 클라이언트가 분리되어 있기에 추후에 서버를 확장할 때 클라이언트에 구애되지 않아서 좋다.
+
+코드들 : https://github.com/ZeroCho/nodejs-book/blob/master/ch4/
+
+restServer.js가 핵심이다. 코드를 보면 req.method로 http 요청 메서드를 구분하고 있다. 메서드가 get이면 다시 req.url로 요청 주소를 구분한다. 주소가 /일 때는 restFront.html을 제공하고, 주소가 /about이면 about.html 파일을 제공한다. 각 주소별로 그 파일을 제공한다. 만약 존재하지 않는 파일을 요청했거나 get 메서드 요청이 아닌 경우라면 404 NOT FOUND 에러가 응답으로 전소오딘다. 응답 과정 중에 예기치 못한 에러가 발생한 경우에는 500 에러가 응답으로 전송된다.
+
+restServer.js를 보면 POST와 PUT 요청을 처리할 때 조금 특이한 것을 볼 수 있다. 바로 req.on('data')와 req.on('end') 의 사용이다. 요청의 본문에 들어 있는 데이터를 꺼내기 위한 작업이라고 보면 된다. req와 res도 내부적으로는 스트림으로 되어 있으므로 요청/응답의 데이터가 스트림 형식으로 전달된다. 또한 on에서 볼 수 있듯이 이벤트도 달려있다.
+
+Network 탭에서 네트워크 요청 내용을 실시간으로 볼 수 있다. REST 방식으로 주소를 만들었으므로 주소와 메서드만 봐도 요청 내용을 유추할 수 있다. Name은 요청 주소를, Method는 요청 메서드를, Status는 HTTP 응답 코드를, Protocol은 통신 프로토콜을, Type은 요청의 종류를 의미한다. xhr 은 AJAX 요청이다.
+
+<hr>
+
+### 쿠키와 세션 이해하기
+(교재상)
+
+클라이언트에서 보내는 요청에는 한 가지 큰 단점이 있다. 바로 누가 요청을 보내는지 모른다는 것이다. 물론 요청을 보내는 IP주소나 브라우저의 정보를 받아올 수는 있다. 하지만 여러 컴퓨터가 공통으로 IP 주소를 가지거나, 한 컴퓨터를 여러 사람이 사용할 수도 있다. 
+
+그렇다면 로그인을 구현하면 되지 않느냐고 생각할 수도 있다. 정답이다. 하지만 로그인을 구현하려면 쿠키와 세션에 대해 알고 있어야 한다. 사용자가 누구인지 기억하기 위해 서버는 요청에 대한 응답을 할 때 쿠키라는 것을 같이 보낸다. 쿠키는 유효 기간이 있으며 name=zerocho와 같이 단순한 '키-값'의 쌍이다. 서버로부터 쿠키가 오면 웹 브라우저는 쿠리를 저장해두었다가 다음에 요청할 때마다 쿠키를 동봉해서 보낸다. 서버는 요청에 들어 있는 쿠키를 읽어서 사용자가 누구인지 파악한다.
+
+브라우저는 쿠키가 있다면 자동으로 동봉해서 보내주므로 따로 처리할 필요가 없다. 서버에서 브라우저로 쿠키를 보낼 때만 코드로 작성하여 처리하면 된다.
+
+즉, 서버는 미리 클라이언트에 요청자가 추정할 만한 정보를 쿠키로 만들어 보내고, 그 다음부터는 클라이언트로부터 쿠키를 받아 요청자를 파악한다. 쿠키가 여러분이 누구인지 추적하고 있는 것이다. 개인정보 유출 방지를 위해 쿠키를 주기적으로 지우라고 권고하는 것은 바로 이러한 이유 때문이다.
+
+쿠키는 요청의 헤더에 담겨 전송된다. 브라우저는응답의 헤더에 따라 쿠키를 저장한다. 
+
+서버에서 직접 쿠키를 만들어 요청자의 브라우저에 넣어보겠다.
+
+```js
+const http = require('http')
+
+http.createServer((req, res) => {
+    console.log(req.url, res.headers.cookie);
+    res.writeHead(200, {'Set-Cookie' : 'mycookie=test'});
+    res.end('Hello Cookie')
+})
+
+.listen(8080, () => {
+    console.log('8080번 포트에서 서버 대기 중입니다.')
+})
+```
+
+쿠키는 name=zerocho;year1994 처럼 문자열 형식으로 존재한다. 쿠키 간에는 세미콜로능로 구분된다
+
+createServer 메서드의 콜백에서는 req 객체에 담겨 있는 쿠키를 가져온다. 쿠키는 req.headers.cookie에 들어 있다. req.headers는 요청의 헤더를 의미한다. 조금 전에 쿠키는 요청과 응답의 헤더를 통해 오간다고 이야기 했는데 응답의 헤어데 쿠키를 기록해야 하므로 res.writeHead 메서드를 사용했다. Set-Cookie 는 브라우저한테 다음과 같은 값의 쿠키를 저장하라는 의미이다. 실제로 응답을 받은 브라우저는 mycookie=test라는 쿠키를 저장한다.
+
+```
+/ undefined
+/favicon.ico mycookie=test
+```
+
+만약 실행 결과가 위와 다르다면 브라우저의 쿠키를 모두 제거한 후에 다시 실행해야 한다.
+
+/favicon.ico는 요청한 적이 없는데 요청은 분명 한 번만 보냈는데 두 개가 기록되어 있다. 첫 번째 요청에서는 쿠키에 대한 정보가 없다고 나오며, 두 번째 요청에서는 mycookie:'test' 가 기록되어 있다.
+
+브라우저는 파비콘이 뭔지 html에서 유추할 수 없으면 서버에 파비콘 정보에 대한 요청을 보낸다. 현재 예제에서는 html에 파비콘에 대한 정보를 넣어두지 않았으므로 브라우저가 추가로 요청한 것이다.
+
+요청 두개를 통해 서버가 제대로 쿠키를 심었음을 확인할 수 있다. 첫 번째 요청을 보내기 전에는 브라우저가 어떠한 쿠키 정보도 가지고 있지 않다. 서버는 응답의 헤더에 mycookie=test라는 쿠키를 심으라고 브라우저에게 명령했다. 따라서 브라우저는 쿠키를 심었고, 두 번째 요청의 헤더에 쿠키가 들어 있음을 확인할 수 있다.
+
+하지만 위 코드는 단순한 쿠키만 심었을 뿐, 그 쿠키가 나인지를 식별해주지 못하고 있다. 이제 사용자를 식별하는 방법을 알아보자
+
+```js
+const http = require('http');
+const fs = require('fs').promises;
+const url = require('url');
+const qs = require('querystring');
+
+const parseCookies = (cookie = '') =>
+  cookie
+    .split(';')
+    .map(v => v.split('='))
+    .reduce((acc, [k, v]) => {
+      acc[k.trim()] = decodeURIComponent(v);
+      return acc;
+    }, {});
+
+http.createServer(async (req, res) => {
+  const cookies = parseCookies(req.headers.cookie); // { mycookie: 'test' }
+  // 주소가 /login으로 시작하는 경우
+  if (req.url.startsWith('/login')) {
+    const { query } = url.parse(req.url);
+    const { name } = qs.parse(query);
+    const expires = new Date();
+    // 쿠키 유효 시간을 현재시간 + 5분으로 설정
+    expires.setMinutes(expires.getMinutes() + 5);
+    res.writeHead(302, {
+      Location: '/',
+      'Set-Cookie': `name=${encodeURIComponent(name)}; Expires=${expires.toGMTString()}; HttpOnly; Path=/`,
+    });
+    res.end();
+  // name이라는 쿠키가 있는 경우
+  } else if (cookies.name) {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(`${cookies.name}님 안녕하세요`);
+  } else {
+    try {
+      const data = await fs.readFile('./cookie2.html');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(err.message);
+    }
+  }
+})
+  .listen(8080, () => {
+    console.log('8080번 포트에서 서버 대기 중입니다!');
+  });
+```
+
+코드가 좀 복잡해졌다. 주소가 /login과 /로 시작하는 것까지 두 개 이므로 주소별로 분기처리를 했다.
+
+- 쿠키는 mycookie=test 같은 문자열이다. 이를 쉽게 사용하기 위해 자바스크립트 객체 형식으로 바꾸는 함수이다. 이 함수를 거치면 json과 비슷하게 {mycookie : 'test'}가 된다. 내부 내용은 중요하지 않으므로 이해하지 않아도 된다. 그저 parseCookies 함수가 문자열을 객체로 바꿔준다고만 알고 있으면 된다.
+- 주소가 /login으로 시작할 경우에는 url과 querystring 모듈로 각각 주소와 주소에 딸려오는 query를 분석한다. 그리고 쿠키의 만료 시간도 지금으로부터 5분 뒤로 설정했다. 이제 302 응답 코드, 리다이렉트 주소와 함께 쿠키를 헤더에 넣었다. 브라우저는 이 응답 코드를 보고 페이지를 해당 주소로 리다이렉트 한다. 헤더에는 한글을 설정할 수 없으므로 name 변수를 encodeURIComponent 메서드로 인코딩했다. 또한 Set-Cookie의 값으로는 제한된 ASCII 코드만 들어가야 하므로 줄바꿈을 넣으면 안된다.
+- 그 외의 경우(/로 접속했을 때 등), 먼저 쿠키가 있는지 없는지를 확인한다. 쿠키가 없다면 로그인 할 수 있는 페이지를 보낸다. 처음 방문한 경우에는 쿠키가 없으므로 cookie2, html이 전송된다. 쿠키가 있다면 로그인한 상태로 간주하여 인사말을 보낸다.
+
+Set-Cookie로 쿠키를 설정할 때 만료 시간과 HttpOnly, Path같은 옵션을 부여했다. 쿠키를 설정할 떄는 각종 옵션을 넣을 수 있으며 옵션 사이에는 세미콜론을 써서 구분하면 된다. 쿠키에는 들어가면 안되는 글자들이 있는데, 대표적으로 한글과 줄바꿈이 있다. 한글은 encodeURIComponent로 감싸서 넣는다.
+
+- 쿠키명=쿠키값 : 기본적인 쿠키의 값이다. mycookie=test 같이 설정한다.
+- Expires=날짜 : 만료 기한이다. 이 기한이 지나면 쿠키가 제거된다. 기본값은 클라이언트가 종료될 때까지 이다.
+- Max-age=초 : Expires 와 비슷하지만 날짜 대신 초를 입력할 수 있다. 해당 초가 지나면 쿠키가 제거된다.
+- Domain=도메인명 : 쿠키가 전송될 도메인을 특정할 수 있다. 기본값은 현재 도메인이다.
+- Path=URL : 쿠키가 전송될 URL을 특정할 수 있다. 기본값은 '/' 이고, 이 경우 모든 URL에서 쿠키를 전송할 수 있다.
+- Secure : HTTPS 일 경우에만 쿠키가 전송된다.
+- HttpOnly: 설정 시 자바스크립트에서 쿠키에 접근할 수 없다. 쿠키 조작을 방지하기 위해 설정하는 것이 좋다.
+
+이제는 새로고침을 해도 로그인이 유지된다. 원하는대로 동작하기는 하지만 이 방식은 상당히 위험하다. Application 탭에서 보이는 것처럼 쿠키가 노출되어 있다. 또한, 쿠키가 조작될 위험도 있다. 그래서 이름 같은 민감한 정보를 쿠키에 넣는것은 적절하지 못하다.
+
+session.js
+```js
+const http = require('http');
+const fs = require('fs').promises;
+const url = require('url');
+const qs = require('querystring');
+
+const parseCookies = (cookie = '') =>
+  cookie
+    .split(';')
+    .map(v => v.split('='))
+    .reduce((acc, [k, v]) => {
+      acc[k.trim()] = decodeURIComponent(v);
+      return acc;
+    }, {});
+
+const session = {};
+
+http.createServer(async (req, res) => {
+  const cookies = parseCookies(req.headers.cookie);
+  if (req.url.startsWith('/login')) {
+    const { query } = url.parse(req.url);
+    const { name } = qs.parse(query);
+    const expires = new Date();
+    expires.setMinutes(expires.getMinutes() + 5);
+    const uniqueInt = Date.now();
+    session[uniqueInt] = {
+      name,
+      expires,
+    };
+    res.writeHead(302, {
+      Location: '/',
+      'Set-Cookie': `session=${uniqueInt}; Expires=${expires.toGMTString()}; HttpOnly; Path=/`,
+    });
+    res.end();
+  // 세션쿠키가 존재하고, 만료 기간이 지나지 않았다면
+  } else if (cookies.session && session[cookies.session].expires > new Date()) {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(`${session[cookies.session].name}님 안녕하세요`);
+  } else {
+    try {
+      const data = await fs.readFile('./cookie2.html');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(err.message);
+    }
+  }
+})
+  .listen(8085, () => {
+    console.log('8085번 포트에서 서버 대기 중입니다!');
+  });
+```
+
+cookie2.js 와는 달라진 부분이 있다. 쿠키에 이름을 담는 대신, uniqueInt라는 숫자 값을 보냈다. 사용자의 이름과 만료 시간은 uniqueInt 속성명 아래에 이쓴ㄴ session이라는 객체에 대신 저장한다.
+
+이제 cookie.session이 있고 만료 기한을 넘기지 않았다면 session 변수에서 사용자 정보를 가져와 사용한다.
+
+이 방식이 세션이다. 서버에 사용자 정보를 저장하고 클라이언트와는 세션 아이디로만 소통한다. 세션 아이디는 꼭 쿠키를 사용해서 주고받지 않아도 된다. 하지만 많은 웹 사이트가 쿠키를 사용한다. 쿠키를 사용하는 방법이 제일 간단하기 때문이다. 이 책에서도 쿠키를 사용해 세션 아이디를 주고받는 식으로 실습을 진행할 것이다. 세션을 위해 사용하는 쿠키를 세션 쿠키라고 부른다. 
+
+서비스를 새로 만들 떄마다 쿠키와 세션을 직접 구현할 수는 없다. 게다가 지금 코드로는 쿠키를 악용한 여러 가지 위협을 방어하지도 못한다. 위의 방식 역시 세션 아이디 값이 공개되어 있어 누출되면 다른 사람이 사용할 수 있다. 따라서 절대로 위의 코드를 실제 서비스에 사용해서는 안된다. 
+
+<hr>
+
+### https 와 http2
+https 모듈은 웹 서버에 ssl 암호화를 추가한다. get이나 post 요청을 할 때 오가는 데이터를 암호화해서 중간에 다른 사람이 요청을 가로채더라도 내용을 확인할 수 없게 한다. 
+
+https 는 아무나 사용할 수 없다. 암호화를 적용하는 만큼 그것을 인증해줄 수 있는 기관도 필요하기 때문이다. 인증서는 인증 기관에서 구입해야 한다.
+발급 과정이 복잡하고 도메인도 필요하므로 인증서를 발급하고, 적용하는 방법은 책에서 보자 !
+
+<hr>
+
+### cluster 
+cluster 모듈은 기본적으로 싱글 프로세스로 동작하는 노드가 CPU 코어를 모두 사용할 수 있게 해주는 모듈이다. 포트를 공유하는 노드 프로세스를 여러 개 둘 수도 있으므로, 요청이 많이 들어왔을 때 병렬로 실행된 서버의 개수만큼 요청이 분산되게 할 수 있다. 서버에 무리가 덜 가게 되는 셈이다.
+
+cluster.js
+```js
+const cluster = require('cluster');
+const http = require('http');
+const numCPUs = require('os').cpus().length;
+
+if(cluster.isMaster) {
+    console.log(`마스터 프로세스 아이디: ${process.pid}`);
+
+    for (let i = 0; i < numCPUs; i += 1) {
+        cluster.fork();
+    }
+
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`${worker.process.pid}번 워커가 종료되었습니다.`);
+        console.log('code', code, 'signal', signal);
+    });
+} else {
+    http.createServer((req, res) => {
+        res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+        res.write('<h1>Hello Node</h1>');
+        res.end('<p>Hello Cluster</p>');
+    }).listen(8080);
+
+    console.log(`${process.pid}번 워커 실행`);
+}
+```
+
+worker_threads 의 예제와 모양이 비슷하다. 다만 스레드가 아니라 프로세스이다. 클러스터에는 마스터 프로세스와 워커 프로세스가 있다. 마스터 프로세스는 CPU 개수 만큼 워커 프로세스를 만들고, 8080 포트에서 대기한다. 요청이 들어오면 만들어진 워커 프로세스에 요청을 분배한다.
+
+워커 프로세스가 실질적인 일을 하는 프로세스이다.
+
+웹 서버 주소는 HTML 또는 CSS 같은 정적 파일을 요청하는 주소와 서버의 users 자원을 요청하는 주소로 크게 나뉘어져 있다. 만약 파일이나 자원의 수가 늘어나면 그에 따라 주소의 종류도 많아져야 한다. 
+그런데 if문이 많아 이미 코드가 상당히 길어져서 보기도 어렵고 관리하기도 어렵다. 주소의 수가 많아질수록 코드는 계속 길어진다. 여기에 쿠키와 세션을 추가하게 되면 더 복잡해질 것이다. Express 모듈을 사용하면 편리하게 만들 수 있다.
+
+<hr>
+
+## 패키지 매니저
+
+### npm 알아보기
+npm은 Node Package Manager의 약어로, 이름 그대로 노드 패키지 매니저이다.
+
+대부분의 자바스크립트 프로그램은 패키지라는 이름으로 npm에 등록되어 있으므로 특정 기능을 하는 패키지가 필요하다면 npm에서 찾아 설치하면 된다.
+
+### package.json으로 패키지 관리하기
+서비스에 필요한 패키지를 하나씩 추가하다 보면 어느새 패키지 수가 100개를 훌쩍넘어버리게 된다. 그리고 사용할 패키지는 저마다 고유한 버전이 있으므로 어딘가에 기록해두어야 한다. 같은 패키지라도 버전별로 기능이 다를 수 있으므로 프로젝트를 설치할 때 패키지도 동일한 버전을 설치하지 않으면 문제가 생길 수 있다. 이때 설치한 패키지의 버전을 관리하는 파일이 바로 package.json이다.
+
+따라서 노드 프로젝트를 시작하기 전에는 폴더 내부에 무조건 package.json 부터 만들고 시작해야 한다. npm은 package.json을 만드는 명령어를 제공한다.
+
+```
+npm init
+```
+
+설정은 입맛에 맞게 바꾸고 옵션에 대해 알아보자
+- package name : 패키지의 이름이다. package.json의 name 속성에 저장된다.
+- version : 패키지의 버전이다. npm의 버전은 다소 엄격하게 관리된다.
+- entry point : 자바스크립트 실행 파일 진입점이다. 보통 마지막으로 module.exports를 하는 파일을 지정한다. package.json의 main 속성에 저장된다.
+- test command : 코드를 테스트할 때 입력할 명령어를 의미한다. package.json scripts 속성 안의 test 속성에 저장된다.
+- git repository : 코드를 저장해둔 깃 저장소 주소를 의미한다.
+- keywords : 키워드는 npm 공식 홈페이지에서 패키지를 쉽게 찾을 수 있도록 해준다.
+- license : 해당 패키지의 라이선스를 넣으면 된다.
+
+script 부분은 npm 명령어를 저장해두는 부분입니다. 콘솔에서 npm run [스크립트 명령어]를 입력하면 해당 스크립트가 실행된다.
+
+test 스크립트 외에도 scripts 속성에 명령어 여러 개를 등록해두고 사용할 수 있다. 보통 start 명령어에 node [파일명]을 저장해두고 npm start로 실행한다.
+
+이제 패키지를 설치해보죠. 익스프레스를 설치해보겠다. npm install [패키지 이름]을 콘솔에 입력하면 된다.
+
+이렇게 하면 express 패키지가 설치되었다.
+- --save 옵션은 dependencies에 패키지 이름을 추가하는 옵션이지만 npm@5부터는 기본값으로 설정되어 있어 있으므로 따로 붙이지 않아도 된다.
+
+설치를 하게 되면 node_modules라는 폴더도 생성되었다. 그 안에 설치하 패키지들이 들어있다. 분명 express 하나만 설치했는데도 패키지가 여러 개 들어있는데 이는 express가 의존하는 패키지들이다. 패키지 하나가 다른 패키지를 그 패키지들이 또 다른 패키지들에 의존한다. 이렇게 의존 관계가 복잡하게 얽혀 있어 package.json이 필요한 것이다.
+
+package-lock.json이라는 파일도 생성되었다. 내용을 보면 직접 설치한 express 외에도 node_modules에 들어 있는 패키지들의 정확한 버전과 의존 관계가 담겨있다. npm으로 패키지를 설치, 수정, 삭제할 때마다 패키지들 간의 내부 의존 관계를 이 파일에 저장한다.
+
+개발 중에만 사용되는 패키지들은 npm install --save-dev [패키지] 로 설치한다. package.json에 새로운 석성이 생겼다. 새로 생긴 devDependencies 속성에서는 개발용 패키지들만 따로 관리한다.
+
+npm 에는 전역 설치라는 옵션도 있다. 패키지를 현재 폴더의 node_modules에 설치하는 것이 아니라 npm이 설치되어 있는 폴더에 설치한다. 이 폴더의 경로를 보통 시스템 환경 변수에 등록되어 있으므로 전역 설치한 패키지는 콘솔의 명령어로 사용할 수 있다. 전역 설치를 했다고 해서 패키지를 모든 곳에서 사용한다는 뜻은 아니다. 대부분 명령어로 사용하기 위해 전역 설치한다.
+
+리눅스나 맥에서는 전역 설치 시에 관리자 권한이 필요하므로 sudo를 앞에 붙여야 한다. 
+
+<hr>
+
+### 패키지 버전 이해하기
+노드 패키지들의 버전은 항상 세 자리로 이루어져 있다. 심지어 노드의 버전도 세 자리 이다. 버전이 세 자리인 이유는 SemVer 방식의 버전 넘버링을 따르기 때문입니다.
+
+SemVer란, Semantic versioning 의 약어이다. 버전을 구성하는 세 자리가 모두 의미를 가지고 있다는 뜻 이다.
+
+각각의 패키지는 모두 버전이 다르고 패키지 간의 의존 관계도 복잡하다. 어떤 패키지의 버전을 업그레이드 했는데 에러가 발생한다면 문제가 심각해질 수 있다. 따라서 버전 번호를 어떻게 정하고 올려야 하는지를 명시하는 규칙이 생겼다. 이것이 SemVer이다.
+
+버전의 첫 번째 자리는 major 버전이다. major 버전이 0이면 초기 개발 중이라는 뜻이다. 1 부터는 정식 버전을 의미하며, major 버전은 하위 호환이 안될 정도로 패키지의 내용이 수정 되었을 때 올린다.
+
+버전의 두 번쨰 자리는 minor 버전이다. minor 버전은 하위 호환이 되는 기능 업데이트 할 때 올린다. 
+
+버전의 세 번째 자리는 patch 버전이다. 새로운 기능이 추가되었다기보다는 기존 기능에 문제가 있어 수정한 것으 내놓았을 때 patch 버전을 올린다.
+
+새 버전을 배포한 후에는 그 버전의 내용을 절대 수정하면 안 된다. 만약 수정 사항이 생기면 3 자리중 하나를 의미에 맞게 올려서 새로운 버저능로 배포해야한다. 이렇게 하면 배포된 버전 내용이 바뀌지 않아서 패키지 간 의존 관계에 큰 도움이 되며, 특정 버전이 정상적으로 동작하고 같은 버전을 사용하면 어떠한 경우라도 정상적으로 동작할 것이라 믿을 수 있다.
+
+버전의 숫자마다 의미가 부여되어 있으므로 다른 패키지를 사용할 때도 버전만 보고 에러 발생 여부를 가늠할 수 있다.
+
+- ^ 기호는 minor 버전까지만 설치하거나 업데이트한다.
+- ~ 기호는 patch 버전까지만 설치하거나 업데이트한다.
+- 
+- " >, <, >=, <=, = "은 알기 쉽게 초과, 미만, 이상, 이하, 동일을 뜻한다. 
+- @latest는 안정된 가장 최신 버전의 패키지를 설치한다.
+- @next를 사요아면 가장 최근 배포판을 설치해서 사용한다. 안정되지 않은 알파나 베타 버전의 패키지를 설치할 수 있다는 것이다.
+
+<hr>
+
+### 기타 npm 명령어
+npm으로 설치한 패키지를 사용하다 보면 새로운 기능이 추가되거나 버그를 고친 새로운 버전이 나올 때가 있다. npm outdated 명령어로 업데이트할 수 있는 패키지가 있는지 확인해보면 된다.
+
+Current 와 Wanted 가 다르다면 업데이트가 필요한 경우이다. 이럴 때는 npm update [패키지명] 으로 업데이트할 수 있다. 
+
+npm uninstall [패키지명]은 패키지가 node_modules와 package.json에서 사라진다. rm으로 줄여 쓸 수 있다. 
+
+npm search [검색어]로 패키지를 검색할 수 있다. 윈도나 맥에서는 브라우저를 통해 npm 공식 사이트에서 검색하면 편리할 것이다.
+
+npm info [패키지명]은 패키지의 세부 정보를 파악하고자 할 때 사용하는 명령어이다. package.json의 내용과 의존 관계, 설치 가능한 버전 정보 등이 표시된다.
+
+npm adduser 는 npm 로그인을 위한 명령어이다. npm 공식 사이트에서 가입한 계졍으로 로그인하면 된다. 나중에 패키지를 배포할 때 로그인이 필요하다. 
+
+npm whoami 는 로그인한 사용자가 누구인지 알린다. 로그인된 상태가 아니라면 에러가 발생한다.
+
+npm logout 은 npm adduser로 로그인한 계정을 로그아웃할 때 사용한다.
+
+npm version [버전] 명령어를 사용하면 package.json 버전을 올린다. 원하는 버전의 숫자를 너흥며 ㄴ된다.
+
+npm deprecate [패키지명][버전][메시지]는 해당 패키지를 설치할 때 경고 메시지를 띄우게 하는 명령어이다. 자신의 패키지에만 이 명령어를 적용할 수 있다.
+
+npm publish 는 자신이 만든 패키지를 제거할 때 사용한다. 24시간 이내에 배포한 패키지만 제거할 수 있다.
+
+npm ci는 package.json 대신 package-lock.json 에 기반하여 패키지를 설치한다.
+
+이 외의 명령어는 공식 사이트에서 확인하길 바란다.
+
+배포와 관련된 명령어와 방법은 교재 224쪽에 있다.
