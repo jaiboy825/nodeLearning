@@ -1325,7 +1325,7 @@ worker_threads 의 예제와 모양이 비슷하다. 다만 스레드가 아니�
 
 <hr>
 
-## 패키지 매니저
+# 패키지 매니저
 
 ### npm 알아보기
 npm은 Node Package Manager의 약어로, 이름 그대로 노드 패키지 매니저이다.
@@ -1390,7 +1390,6 @@ SemVer란, Semantic versioning 의 약어이다. 버전을 구성하는 세 자�
 
 - ^ 기호는 minor 버전까지만 설치하거나 업데이트한다.
 - ~ 기호는 patch 버전까지만 설치하거나 업데이트한다.
-- 
 - " >, <, >=, <=, = "은 알기 쉽게 초과, 미만, 이상, 이하, 동일을 뜻한다. 
 - @latest는 안정된 가장 최신 버전의 패키지를 설치한다.
 - @next를 사요아면 가장 최근 배포판을 설치해서 사용한다. 안정되지 않은 알파나 베타 버전의 패키지를 설치할 수 있다는 것이다.
@@ -1425,3 +1424,551 @@ npm ci는 package.json 대신 package-lock.json 에 기반하여 패키지를 �
 이 외의 명령어는 공식 사이트에서 확인하길 바란다.
 
 배포와 관련된 명령어와 방법은 교재 224쪽에 있다.
+
+<hr>
+
+# 익스프레스 웹 서버 만들기
+익스프레스는 http 모듈의 요청과 응답 객체에 추가 기능들을 부여했다. 기존 메서드들도 계속 사용할 수 있지만, 편리한 메서드들을 추가하여 기능을 보완했다. 또한 코드를 분리하기 귑세 만들어 관리하기도 용이하다. 그리고 더 이상 if문으로 요청 메서드와 주소를 구별하지 않아도 된다.
+
+### 익스프레스 프로젝트 시작하기
+package.json을 먼저 생성하고 script부분에 start 속성은 잊지 말고 넣어줘야 한다. nodemon app이라는 속성은 app.js은 nodemon 으로 실행한다는 뜻이다. 서버 코드에 수정 사항이 생길 때마다 매번 서버를 재시작 하기는 귀찮으므로 nodemon 모듈로 서버를 자동으로 재시작 한다. 앞으로 서버 코드를 수정하면 nodemon이 서버를 자동으로 재시작 한다. 
+
+express 모듈을 실행해 app 변수에 할당한다. 익스프레스 내부에 http 모듈이 내장되어 있으므로 서버의 역할을 할 수 있다.
+
+app.set('port', 포트) 로 서버가 실행될 포트를 설정한다. process.env 객체에 port 속성이 있다면 그 값을 사용하고, 없다면 기본값으로 3000번 포트를 이요하도록 되어 있다. 이렇게 app.set(키, 값)을 사용해서 데이터를 저장할 수 있다. 나중에 데이터를 app.get(키)로 가져올 수 있다. 
+
+app.get(주소,라우터)는 주소에 대한 GET 요청이 올 때 어떤 동작을 할지 적는 부분이다. 매개 변수 req는 요청에 관한 정보가 들어 있는 객체이고, res는 응답에 관한 정보가 들어 있느 객체 이다. 익스프레스에서는 res.write나 res.end 대신 re
+
+GET 요청외에도 POST, PUT, PATCH, DELETE, OPTIONS 에 대한 라우터를 위한 app.post, app.put, app.patch, app.delete, app.options 메서드가 존재한다.
+
+### 자주 사용하는 미들웨어
+(교재 글)
+미들웨어는 익스프레스의 핵심이다. 요청과 응답의 중간에 위치하여 미들웨어라고 부른다. 뒤에 나오는 라우터와 에러 핸들러 또한 미들웨어의 일종이므로 미들웨어가 익스프레스의 전부라고 해도 과언이 아니다. 미들웨어는 요청과 응답을 조작하여 기능을 추가하기도하고, 나쁜 요청을 걸러내기도 한다.
+
+미들웨어는 app.use와 함께 사용된다. app.use(미들웨어) 꼴이다. 익스프레스 서버에 미들웨어를 연결을 해본다.
+
+app.use에 매개변수가 req, res, next인 함수를 넣으면 된다. 미들웨어는 위에서부터 아래로 순서대로 실행되면서 요청과 응답 사이에 특별한 기능을 추가할 수 있다. next라는 세번째 매개변수를 사용했는데, 다음 미들웨어로 넘어가는 함수이다. next를 실행하지 않으면 다음 미들웨어가 실행되지 않는다. 
+
+주소를 첫 번째 인수에 넣어주지 않는다면 미들웨어는 모든 요청에서 실행되고, 주소를 넣는다면 해당하는 요청에서만 실행된다고 보면 된다.
+
+- app.use(미들웨어) : 모든 요청에서 미들웨어 실행
+- app.use('/abc', 미들웨어) : abc로 시작하는 요청에서 미들웨어 실행
+- app.post('/abc', 미들웨어) : abc로 시작하는 POST 요청에서 미들웨어 실행
+
+app.use나 app.get 같은 라우터에 미들웨어를 여러 개 장착할 수 있다. 
+
+에러 처리 미들웨어는 매개변수가 err, req, res, next 가 네 개 이다. 모든 매개변수를 사용하지 않더라도 매개변수가 반드기 네 개여야 한다. 첫 번째 매개변수 err에는 에러에 관한 정보가 담겨 있다. res.status 메서드로 HTTP 상태 코드를 지정할 수 있다. 기본값은 200으로 에러 처리 미들웨어를 직접 연결하지 않아도 기본적으로 익스프레스가 에러를 처리하긴 한다. 하지만 실무에서는 직접 에러 처리 미들웨어를 연결해주는 것이 좋다. 에러 처리 미들웨어는 특별한 경우가 아니면 가장 아래에 위치하도록 한다. 
+
+실무에서 자주 사용하는 패키지
+```
+$ npm i morgan cookie-parser express-session dotenv
+```
+
+dotenv를 제외한 다른 패키지들은 미들웨어이다.
+
+app.js
+```js
+const express = require('express');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const dotenv = require('dotenv');
+const path = require('path');
+
+dotenv.config();
+const app = express();
+app.use('port', process.env.PORT || 3000);
+
+app.use(morgan('dev'));
+app.use('/', express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({extended: false}));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(session({
+    resave: false,
+    saveUninitialized : false,
+    secret: process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly : true,
+        secure: false
+    },
+    name: 'session-cookie'
+}));
+
+app.use((req, res, next) => {
+    console.log('모든 요청에 다 실행된다.')
+    next();
+});
+```
+
+.env
+```env
+COOKIE_SECRET = cookiesecret
+```
+
+설치했던 패키지들을 불러온 뒤 app.use에 연결한다. req, res, next 같은 것들이 보이지않아 당황스러울 수도 있는데, 미들웨어 내부에 들어 있다. next도 내부적으로 호출하기에 다음 미들웨어로 넘어갈 수 있다.
+
+dotenv 패키지는 .env 파일을 읽어서 process.env로 만든다. dotenv 패키지의 이름이 dot + env 인 이유이다. process.env.COOKIE_SECRET에 cookiesecret 값이 할당된다. 키 = 값 형식으로 추가하면 된다. process.env를 별도의 파일로 관리하는 이유는 보안과 설정의 편의성 때문이다. 비밀 키들을 소스 코드에 그대로 적어두면 소스코드가 유출되었을 때 키도 같이 유출된다. 따라서 .env 같은 별도의 파일에 비밀 키를 적어두고 dotenv 패키지로 비밀 키를 로딩하는 방식으로 관리하곤 한다. 소크 코드가 유출되더라도 .env 파일만 잘 관리하면 비밀 키는 지킬 수 있다.
+
+### morgan
+morgan 미들웨어는 app.use(margan('dev')) 이런식으로 사용한다.
+
+인수로 dev 외에 combined, common, short, tiny 등을 넣을 수 있다. 인수를 바꾸면 로그가 달라지니 직접 테스트 해보면 알 수 있다. 
+
+### static
+static 미들웨어는 정적인 파일들을 제공하는 라우터 역할을 한다. 기본적으로 제공되기에 따로 설치할 필요 없이 express 객체 안에서 꺼내 장착하면 된다.
+
+```js
+app.use('요청 경로', express.static('실제 경로'));
+
+app.use('/', express.static(path.join(__dirname, 'public')));
+```
+
+함수의 인수로 정적 파일들이 담겨 있는 폴더를 지정하면 된다. 실제 서버의 폴더 경로에는 public이 들어 있지만 요청 주소에는 public이 들어 있지 않다는 점을 주목하자, 서버의 폴더 경로와 요청 경로가 다르므로 외부인이 서버의 구조를 쉽게 파악할 수 없다. 이는 보안에 큰 도움이 된다. 
+
+또한, 정적 파일들을 알아서 제공해주므로 fs.readFile로 파일을 직접 읽어서 전송할 필요가 없다. 만약 요청 경로에 해당하는 파일이 없으면 알아서 내부적으로 next를 호출한다. 만약 파일을 발견했다면 다음 미들웨어는 실행되지 않는다. 응답으로 파일을 보내고 next를 호출하지 않기 때문이다.
+
+###  body-parser
+요청의 본문에 있는 데이터를 해석해서 req.body 객체로 만들어주는 미들웨어이다. 보통 폼 데이터나 ajax 요청의 데이터를 처리한다. 단, 멀티파트 데이터는 처리하지 못한다. 그 경우에는 뒤에 나오는 multer 모듈을 사용하면 된다.
+
+```js
+app.use(express.json());
+app.use(express.urlencoded({extended : false}));
+```
+
+body-parser 미들웨어의 일부 기능이 익스프레스에 내장되었으므로 따로 설치할 필요가 없다.
+
+단, 직접 설치해야되는 경우도 있는데 body-parser는 json과 url-encoded 형식의 데팅터 외에도 Raw, Text 형식의 데이터를 추가로 해석할 수 있다.
+
+Raw는 요청의 본문이 버퍼 데이터일 때, Text는 텍스트 데이터일 때 해성하는 미들웨어이다. 버퍼나 텍스트 요청을 처리할 필요가 있다면 body -parser를 설치한 후에 추가해주면 된다
+
+```js
+const bodyParser = require('body-parser');
+app.use(bodyParser.raw());
+app.use(bodyParser.text());
+```
+
+JSON은 JSON 형식의 데이터 전달 방식이고, URL-encoded는 주소 형식으로 데이터를 보내는 방식이다. 폼 전송은 URL-encoded 방식을 주로 사용한다. urlencoded 메서드를 보면 {extended : false} 라는 옵션이 들어 있다. 이 옵션이 false 면 노드의 querystring 모듈을 사용하여 쿼리스트링을 해석하고, true면 qs 모듈을 사용하여 쿼리스트링을 해석한다. qs 모듈은 내장 모듈이 아니라 npm 패키지 이며, querystring 모듈의 기능을 좀 더 확장한 모듈이다.
+
+### cookie-parser
+cookie-parser는 요청에 동봉된 쿠키를 해석해 req.cookies 객체로 만든다. 
+
+```js
+app.use(cookieParser(비밀키));
+```
+
+해석된 쿠키들은 req.cookies 객체에 들어간다. 예를 들어 name=zerocho 쿠키를 보냈다면 req.cookies 는 { name: 'zerocho'} 가 된다. 
+
+첫 번째 인수로 비밀 키를 넣어줄 수 있다. 서명된 쿠키가 있는 경우, 제공한 비밀 키를 통해 해당 쿠키가 내 서버가 만든 쿠키임을 검증할 수 있다. 쿠키는 클라이언트에서 위조하기 쉬우므로 비밀 키를 통해 만들어낸 서명을 쿠키 값 뒤에 붙인다. 서명이 붙으면 쿠키가 name.zerocho.sign과 같은 모양이 된다. 서명된 쿠키는 req.cookies 대신 req.signedCookies 객체에 들어 있다.
+
+cookie-parser가 쿠키를 생성할 때 쓰이는 것은 아니다. 쿠키를 생성/제거하기 위해서는 res.cookie, res.clearCookie 메서드를 사용해야 한다. res.cookie(키, 값, 옵션) 형식으로 사용한다.
+
+쿠키를 지우려면, 키와 값 외에 옵션도정확히 일치해야 쿠키가 지워진다. 단, expires나 maxAge 옵션은 일치할 필요가 없다.
+
+옵션 중에는 signed라는 옵션이 있는데, 이를 true로 설정하면 쿠키 뒤에 서명이 붙는다. 내 서버가 쿠키를 만들었다는 것을 검증할 수 있으므로 대부분의 경우 서명 옵션을 켜두는 것이 좋다. 서명을 위한 키는 cookieParser 미들웨어에 인수로 넣은 process.env.COOKIE_SECRET 이 된다.
+
+### express-session
+
+세션 관리용 미들웨어 이다. 로그인 등의 이유로 세션을 구현하거나 특정 사용자를 위한 데이터를 임시적으로 저장해둘 때 매우 유용하다. 세션은 사용자별로 req.session 객체 안에 유지된다.
+
+express-session은 인수로 세션에 대한 설정을 받는다. resave는 요청이 올 때 세션에 수정 사항이 생기지 않더라도 세션을 다시 저장할지 설정하는 것이고, saveUninitialized는 세션에 저장할 내역이 없더라도 처음부터 세션을 생성할지 설정하는 것이다. 현재는 둘 다 필요 없으므로 false로 했다.
+
+express-session은 세션 관리 시 클라이언트에 쿠키를 보낸다. 안전하게 쿠키를 전송하려면 쿠키세 서명을 추가해야 하고, 쿠키를 서명하는 데 secret 의 값이 필요하다. cookie-parser의 secret과 같게 설정하는 것이 좋다. 세션 쿠키의 이름은 name 으로 설정한다. 기본 이름은 connect.sid 이다.
+
+cookie 옵션은 세션 쿠키에 대한 설정이다. maxAge, domain, path, expires, sameSite, httpOnly, secure 등 일반적인 쿠키 옵션이 모두 제공된다. 배포 시에는 https를 적용하고 secure도 true로 설정하는 것이 좋다.
+
+express-session으로 만들어진 req.session 객체에 값을 대입하거나 삭제해서 세션을 변경할 수 있다. 나중에 세션을 한 번에 삭제하려면 req.session.destroy 메서드를 호출하면 된다. 현재 세션의 아이디는 req.sessionID로 확인할 수 있다. 세션을 강제로 저장하기 위해 req.session.save 메서드가 존재하지만, 일반적으로 요청이 끝날 때 자동을 ㅗ호출되므로 직접 save 메서드를 호출할 일은 거의 없다.
+
+### 미들웨어의 특성 활용하기
+미들웨어는 req, res, next 를 매개변수로 가지는 함수로서 app.use, app.get, app.post 등으로 장착한다. 특정한 주소의 요청에만 미들웨어가 실행되게 하려면 첫 번째 인수로 주소를 넣으면 된다. 
+
+next를 호출하지 않는 미들웨어는 res.send나 res.sendFile 등의 메서드로 응답을 보내야 한다. express.static 과 같은 미들웨어는 정적 파일을 제공할 때 next 대신 res.sendFile 메서드로 응답을 보낸다. 따라서 정적 파일을 제공하는 경우 express.json, express.urlencoded, cookieParser 미들웨어는 실행되지 않는다. 미들웨어 장착 순서에 따라 어떤 미들웨어는 실행되지 않을 수도 있다.
+
+next 함수에 인수를 넣을 수도 있다. 단, 인수를 넣는다면 특수한 동작을 하는데 route라는 문자열을 넣으면 다음 라우터의 미들웨어로 바로 이동하고, 그 외의 인수를 넣는다면 바로 에러 처리 미들웨어로 이동한다. 이때의 인수는 에러 처리 미들웨어의 err 매개변수가 된다. 라우터에서 에러가 발생할 때 에러를 next(err)을 통해 에러 처리 미들웨어로 넘긴다.
+
+미들웨어 간에 데이터를 전달하는 방법도 있다. 세션을 사용한다면 req.session 객체에 데이터를 넣어도 되지만, 세션이 유지되는 동안에 데이터도 계속 유지된다는 단점이 있다. 만약, 요청이 끝날 때까지만 데이터를 유지하고 싶다면 req 객체에 데이터를 넣어두면 된다.
+
+### multer
+이미지, 동영상 등을 비롯한 여러 가지 파일들을 멀티파트 형식으로 업로드할 때 사용하는 미들웨어이다. 멀티파트 형식이란 다음과 같이 enctype이 multipart/form-data 인 폼을 통해 업로드하는 데이터의 형식을 의미한다.
+
+멀티파트 형식으로 업로드하는 데이터는 개발자 도구 network 탭에서 form data 형식으로 보인다. 이러한 폼을 통해 업로드하는 파일은 body-parser 로는 처리할 수 없고 직접 파싱하기도 어려우므로 multer라는 미들웨어를 따로 사용하면 편리하다.
+
+```js
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, done) {
+      done(null, 'uploads/');
+    },
+    filename(req, file, done) {
+      const ext = path.extname(file.originalname);
+      done(null, path.basename(file.originalname, ext) + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+```
+
+multer 함수의 인수로 설정을 넣는다. storage 속성에는 어디에 어떤 이름으로 저장할지를 넣는다. destination 과 filename 함수의 req 매개변수에는 요청에 대한 정보가, file 객체에는 업로드한 파일에 대한 정보가 있다. done 매개변수는 함수이다. 첫 번째 인수에는 에러가 있다면 에러를 넣고, 두 번째 인수에는 실제 경로나 파일 이름을 넣어주면 된다. req나 file의 데이터를 가공해서 done 으로 넘기는 형식이다.
+
+현재 설정으로는 uploads라는 폴더에 [파일명 + 현재시간.확장자] 파일명으로 업로드하고 있다. 현재 시간을 넣어주는 이유는 업로드하는 파일명이 겹치는 것을 막기 위해서 이다.
+
+limits 속성에는 업로드에 대한 제한 사항을 설정할 수 있다. 파일사이즈는 5mb 로 제한해두었다.
+
+다만 위 설정을 실제로 활용하기 위해서는 서버에 uploads 폴더가 꼭 존재해야 한다. 없다면 직접 만들어주거나 다음과 같이 fs 모듈을 사용해서 서버를 시작할 때 생성한다.
+```js
+try {
+  fs.readdirSync('uploads');
+} catch (error) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+```
+설정이 끝나면 upload 변수가 생기는데, 여기에 다양한 종류의 미들웨어가 들어있다. 
+
+먼저 파일을 하나만 업로드하는 경우에는 single 미들웨어를 사용한다.
+
+single 미들웨어를 라우터 미들웨어 앞에 넣어두면, multer 설정에 따라 파일 업로드 후 req.file 객체가 생성된다. 인수는 input 태그의 name이나 폼 데이터의 키와 일치하게 넣으면 된다. 업로드 성공 시 결과는 req.file 객체 안에 들어 있다. req.body에는 파일이 아닌 데이터인 title이 들어 있다.
+
+<hr>
+
+## Router 객체로 라우팅 분리하기 
+
+익스프레스를 사용하는 이유 중 하나는 바로 라우팅을 깔끔하게 관리할 수 있다는 점이다.
+
+app.js에서 app.get 같은 메서드가 라우터 부분이다. 라우터를 많이 연결하면 app.js 코드가 매우 길어지므로 익스프레스에서는 라우터를 분리할 수 있는 방법을 제공한다. routes 폴더를 만들고 그 안에 index.js와 user.js를 작성한다.
+
+index.js & user.js
+```js
+const express = require('express');
+
+const router = express.Router();
+
+router.get('/', (req, res) => {
+    res.send('Hello, Express || User');
+});
+
+module.exports = router;
+```
+
+만들었던 index.js와 user.js를 app.use를 통해 app.js에 연결한다. 또한, 에러 처리 미들웨어 위에 404 상태 코드를 응답하는 미들웨어를 하나 추가한다.
+
+```js
+const express = require('express');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const dotenv = require('dotenv');
+const path = require('path');
+
+dotenv.config();
+const indexRouter = require('./routes');
+const userRouter = require('./routes/user');
+
+const app = express();
+app.set('port', process.env.PORT || 3000);
+
+app.use(morgan('dev'));
+app.use('/', express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(session({
+  resave: false,
+  saveUninitialized: false,
+  secret: process.env.COOKIE_SECRET,
+  cookie: {
+    httpOnly: true,
+    secure: false,
+  },
+  name: 'session-cookie',
+}));
+
+app.use('/', indexRouter);
+app.use('/user', userRouter);
+
+app.use((req, res, next) => {
+  res.status(404).send('Not Found');
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).send(err.message);
+});
+
+app.listen(app.get('port'), () => {
+  console.log(app.get('port'), '번 포트에서 대기 중');
+});
+```
+
+indexRouter를 ./routes할 수 있는 이유는 index.js는 생략할 수 있기 때문이다. require('./routes/index.js')와 require('./routes')는 같다.
+
+index.js와 user.js 는 모양이 거의 비슷하지만, 다른 주소의 라우터 역할을 하고 있다. app.use로 연결할 때의 차이 때문이다. indexRouter는 app.use('/')에 연결했고, userRouter는 app.use('/user')에 연결했다. indexRouter는 use의 '/'와 get의 '/'가 합쳐져 GET / 라우터가 되었고, userRouter는 use의 '/user'와 get의 '/'가 합쳐져 GET /user 라우터가 되었다. 이렇게 app.use로 연결할 때 주소가 합쳐진다는 것을 염두하고 있으면 된다.
+
+같은 주소의 라우터를 여러 개 만들어도 된다. 라우터가 몇 개든 간에 next()를 호출하면 다음 미들웨어가 실행된다. 라우터 주소에는 정규표현식을 비롯한 특수 패턴을 사용할 수 있다. 여러 가지 패턴이 있지만 라우트 매개변수라고 불리는 패턴에 대해서 알아보겠다.
+
+```js
+router.get('/user/:id', function(req, res) {
+    console.log(req.params, req.query);
+})
+```
+주소에 :id가 있는데, 문자 그대로 :id를 의미하는 것이 아니다. 이 부분에는 다른 값을 넣을 수 있다. :id에 해당하는 값을 조회할 수 있다는 것이 장점이며, req.params 객체 안에 들어있다.
+
+단, 이 패턴을 사용할 때 일반 라우터보다 뒤에 위치해야 한다. 다양한 라우터를 아우르는 와일드 카드 역할을 하므로 일반 라우터보다는 뒤에 위치해야 다른 라우터를 방해하지 않는다.
+
+app.js에서 에러 처리 미들웨어 위에 넣어둔 미들웨어는 일치하는 라우터가 없을 때 404 상태 코드를 응답하는 역할을 한다. 미들웨어가 존재하지 않아도 익스프레스가 자체적으로 404 에러를 처리해주기는 하지만, 웬만하면 404 응답 미들웨어와 에러 처리 미들웨어를 연결해주는 것이 좋다. 
+
+
+### req, res 객체 살펴보기
+
+익스프레스의 req, res 객체는 http 모듈의 req, res 객체를 확장한 것이다. 기존 http 모듈의 메서드를 사용할 수 있거, 익스프레스가 추가한 메서드나 속성을 사용할 수 있다.
+- req.app : req 객체를 통해 app 객체에 접근할 수 있다. req.app.get('port')와 같은 식으로 사용할 수 있다.
+- req.body : body-parser 미들웨어가 만드는 요청의 본문을 해석한 객체이다.
+- req.cookies : cookike-parset각 미들웨어가 만드는 요청의 쿠키를 해석한 객체이다.
+- req.ip : 요청의 ip 주소가 담겨 있다.
+- req.params : 라우트 매개변수에 대한 정보가 담긴 객체이다.
+- req.query : 쿼리스트링에 대한 정보가 담긴 객체이다.
+- req.signedCookies : 서명된 쿠키들은 req.cookies 대신 여기에 담겨 있다.
+  
+res 객체도 알아보자
+
+- res.app : req.app 처럼 res 객체를 통해 app 객체에 접근할 수 있다.
+- res.cookie (키, 값, 옵션) : 쿠키를 설정하는 메서드이다.
+- res.clearCookie(키, 값, 옵션) : 쿠키를 제거하는 메서드이다.
+- res.end() : 데이터 없이 응답을 보낸다.
+- res.json(JSON) : JSON 형식의 응답을 보낸다.
+- res.redirect(주소) : 리다이렉트할 주소와 함께 응답을 보낸다.
+- res.render(뷰, 데이터) : 템플릿 엔진을 렌더링해서 응답할 때 사용하는 메서드이다.
+- res.send(데이터) : 데이터와 함께 응답을 보낸다. 데이터는 문자열일 수도 있고 HTML일 수도 있으며, 버퍼일 수도 있고 객체나 배열일 수도 있다.
+- res.sendFile(경로) : 경로에 위치한 파일을 응답한다.
+- res.set(헤더, 값) : 응답의 헤더를 설정한다.
+- res.status(코드) : 응답 시의 http 상태 코드를 지정한다.
+
+req나 res 객체의 메서드는 메서드 체이닝을 지원하는 경우가 많다. 메서드 체이닝을 사용하면 코드 길이를 줄일 수 있다.
+
+### 템플릿 엔진 사용하기
+(교재 내용)
+HTML로 1,000 개나 되는 데이터를 모두 표현하고 싶다면 일일이 직접 코딩해서 넣어야 합니다. 자바스크립트로 표현하면 반복문으로 간단하게 처리할 수 있는데 말이죠. 템플릿 엔진은 자바스크립트를 사용해서 HTML을 렌더링할 수 있게 합니다. 따라서 기존 HTML과는 문법이 살짝 다를 수도 있고, 자바스크립트 문법이 들어 있기도 합니다.
+
+이번에는 퍼그와 넌적스에 대해 알아봅니다. 앞으로의 예제는 넌적스를 사용합니다.
+
+#### 퍼그(제이드)
+예전 이름인 제이드로 더 유명한 퍼그는 꾸준한 인기를 얻고 있습니다. 문법이 간단하므로 코드의 양이 줄어들기 때문입니다. 루비를 사용해봤다면 문법이 비슷해 금방 적응할 겁니다. 물론 문법이 쉬워서 루비를 모르는 사람도 빠르게 배울 수 있습니다. 단, HTML과는 문법이 많이 달라 호불호가 갈립니다.
+
+```
+$ npm i pug
+```
+
+views는 템플릿 파일들이 위치한 폴더를 지정하는 것이다. res.render 메서드가 이 폴더 기준으로 템플릿 엔진을 찾아서 렌더링한다. res.render('index') 라면 views/index.pug 를 렌더링 한다. res.render('admin/admin') 이라면 views/admin/main.pug를 렌더링 한다.
+
+view engine은 어떠한 종류의 템플릿 엔진을 사용할지를 나타낸다. 현재 pug로 설정되어 있으므로 그대로 사용하면 된다.
+
+#### HTML 표현
+기존 HTML과 다르게 화살괄호와 닫는 태그가 없다. 탭 또는 스페이스로만 태그의 부모 자식 관계를 규명한다. 탭 한 번, 스페이스 두번 또는 스페이스 네 번 모두 상관없다. 모든 파일에 동일한 종류의 들여쓰기를 적용하면 된다. 자식 태그는 부모 태그보다 들여쓰기되어 있어야 한다. 들여쓰기에 오류가 있으면 제대로 렌더링 되지 않으니 주의해야 한다.
+
+```pug
+doctype html
+html
+  head
+    title=title
+    link(rel='stylesheet', href='/stylesheet/style.css')
+```
+
+속성 중 아이디와 클래스가 있는 경우에는 
+```pug
+#login-button
+.post-image
+span#highlight
+p.hidden.full
+```
+이렇게 표현한다. div의 경우 생략 가능하다.
+
+HTML 텍스트는 
+```pug
+p Welcome to Express
+button(type='submit') 전송
+```
+이렇게 한 칸 띄고 입력하면 된다.
+
+에디터에서 텍스트를 여러 줄 입력하고 싶다면 |(파이프) 를 넣으면 된다
+```pug
+p
+  | 안녕하세요
+  | 여러 줄을 입력합니다
+  br
+  | 태그도 중간에 넣을 수 있습니다.
+```
+여러 줄을 작성해도 HTML 코드에서는 한 줄로 나온다.
+
+style이나 script 태그로 css 또는 자바스크립트 코드를 작성하고 싶다면 
+```pug
+style.
+  h1 {
+      font-size: 30px;
+  }
+
+script.
+  const message = 'Pug';
+  alert(message);
+```
+
+#### 변수
+HTML 과 다르게 자바스크립트 변수를 템플릿에 렌더링할 수 있다. res.render 호출 시 보내는 변수를 퍼그가 처리한다.
+
+```js
+router.get('/', (req, res) => {
+  res.render('index', { title: 'Express' });
+});
+```
+
+res.render(템플릿, 변수 객체)는 익스프레스가 res 객체에 추가한 템플릿 렌더링을 위한 메서드이다. index.pug 를 html 로 렌더링 하면서 {title : 'Express'} 라는 객체를 변수로 집어넣는다. layout.pug와 index.pug의 title 부분이 모두 Express로 치환된다. 즉, HTML에도 변수를 사용할 수 있게 된 셈이다.
+
+res.render 메서드에 두 번째 인수로 변수 객체를 넣는 대신, res.locals 객체를 사용해서 변수를 넣을 수도 있다. 
+```js
+router.get('/', function(req, res, next) {
+    res.locals.title = 'Express';
+    res.render('index');
+})
+```
+위와 같이 하면 템플릿 엔진이 res.locals 객체를 읽어서 변수를 집어 넣는다. 이 방식의 장점은 현재 라우터뿐만 아니라 다른 미들웨어에서도 res.locals 객체에 접근할 수 있다는 것이다. 따라서 다른 미들웨어에서 템플릿 엔진용 변수를 미리 넣을 수도 있다.
+
+퍼그에서 변수를 사용하는 방법
+```pug
+h1 = title
+p Welcome to #{title}
+button(class=title, type='submit') 전송
+input(placeholder=title + ' 연습')
+```
+
+서버로부터 받은 변수는 다양한 방식으로 퍼그에서 사용할 수 있다. 변수를 텍스트로 사용하고 싶다면 태그 뒤에 =을 붙인 후 변수를 입력한다. 속성에도 =을 붙인 후 변수를 사용할 수 있다. 텍스트 중간에 변수를 넣으려면 #{변수}를 사용하면 된다. 그러면 변수가 그 자리에 들어간다. #{} 의 내부와 = 기호 뒷 부분은 자바스크립트로 해석하므로 input 태그의 경우처럼 자바스크립트 구문을 써도 된다.
+
+서버에서 데이터를 클라이언트로 내려보낼 때 #{}와 = 을 매우 빈번하게 사용한다.
+
+내부에 직접 변수를 선언할 수도 있다. 빼기를 먼저 입력하면 뒤에 자바스크립트 구문을 작성할 수 있다. 여기에 변수를 선언하면 다음 줄부터 해당 변수를 사용할 수 있다.
+
+``` pug
+- const node = 'Node.js'
+- const js = 'Javascript'
+p #{node}와 #{js}
+```
+
+퍼그는 기본적으로 변수의 특수 문자를 HTML 엔티티로 이스케이프한다. 이스케이프를 원하지 않는다면 = 대신 !=을 사용하면 된다.
+
+``` pug
+p= '<strong>이스케이프</strong>'
+p!= '<strong>!이스케이프</strong>'
+```
+
+#### 반복문
+HTML 과 다르게 반복문도 사용할 수 있으며, 반복 가능한 변수인 경우에만 해당된다.
+
+each 문으로 반복문을 돌릴 수 있다.
+
+```pug
+ul
+  each fruit in ['사과','배','오렌지']
+    li= fruit
+```
+
+반복문 사용 시 인덱스도 가져올 수 있다.
+
+#### 조건문
+조건문으로 편리하게 분기 처리할 수 있다. if, else if, else를 사용할 수 있다. 
+
+```pug
+if isLoggedIn
+  div 로그인 되었습니다.
+else
+  div 로그인이 필요합니다.
+```
+
+case 문도 가능하다.
+```pug
+case fruit
+  when 'apple'
+    p 사과이다.
+  when 'orange'
+    p 오렌지다
+  when 'banana'
+    p 바나나다
+```
+
+#### include 
+다른 퍼그나 HTML 파일을 넣을 수 있다.
+헤더나 푸터, 내비게이션처럼 웹 제작 시 공통되는 부분을 따로 관리할 수 있어 매 페이지마다 동일한 HTML을 넣어야 하는 번거로움을 없앤다. include 파일 경로를 사용한다.
+
+#### extends 와 block 
+레이아웃을 정할 수 있다. 공통되는 레이아웃 부분을 따로 관리할 수 있어 좋다. include와도 함께 사용하곤 한다.
+```pug
+extends layout
+
+block content
+  main
+    p 내용입니다.
+
+block script
+  script(src="main.js")
+```
+레이아웃이 될 파일에는 공통된 마크업을 넣되 페이지마다 달라지는 부분을 block으로 비워둔다. block은 여러 개 만들어도 된다. block은 block [블록명]으로 선언한다.
+
+block이 되는 파일에서는 extends 키워드로 레이아웃 파일을 지정하고 block 부분을 넣는다. block 선언보다 한 단계 더 들여쓰기되어 있어야 한다. 나중에 익스프레스에서 res.render('body')를 사용해 하나의 HTML로 합쳐 렌더링할 수 있다. 퍼그 확장자는 생략 가능하다. block 부분이 서로 합쳐진다.
+
+### 넌적스
+넌적스는 퍼그의 HTML 문법 변화에 적응하기 힘든 분에게 적합한 템플릿 엔진이며, 파이어폭스를 만든 모질라에서 만들어졌다.
+
+```
+$ npm i nunjucks
+```
+
+넌적스는 퍼그와는 연결 방법이 다소 다르다. configure의 첫 번째 인수로 views 폴더의 경로를 넣고, 두 번째 인수로 옵션을 넣는다. 이 때 express 속성에 app 객체를 연결한다. watch 옵션이 true이면 HTML 파일이 변경될 때 템플릿 엔진을 다시 렌더링한다.
+
+파일은 퍼그와 같은 특수한 확장자 대신 html을 그대로 사용해도 된다. 넌적스임을 구분하려면 확장자로 njk를 쓰면 된다. 단, 이때는 view engine도 njk로 바꿔야 한다.
+
+### 변수
+res.render 호출 시 보내는 변수를 넌적스가 처리한다. routes/index.js의 코드를 보면
+```js
+router.get('/', function(req, res, next) {
+    res.render('index', {title : 'Express'})
+})
+```
+넌적스에서 변수는 {{}}로 감싼다.
+
+내부에 변수를 사용할 수도 있다. 변수를 선언할 때는 {% set 변수 = '값' %}를 사용한다.
+
+HTML 을 이스케이프 하고 싶지 않다면 {{변수 | safe}}를 사용한다.
+
+#### 반복문
+넌적스에서는 특수한 구문을 {%%} 안에 쓴다.따라서 반복문도 이 안에 넣으면 된다. for in문과 endfor 사이에 위치하면 된다.
+```njk
+<ul>
+    {% set fruits = ['사과','배','오렌지']%}
+    {% for item in fruits%}
+    <li>{{item}}</li>
+    {% endfor %}
+</ul>
+```
+
+인덱스의 경우 loop.index라는 특수한 변수를 사용할 수 있다.
+
+#### 조건문
+조건문은 {% if %} 등 으로 이루어져 있다.
+
+#### include 
+다른 html 파일을 넣을 수 있다.
+헤더나 푸터, 내비게이션 처럼 웹 제작 시 공통되는 부분을 따로 관리할 수 있어 매 페이지마다 동일한 HTML을 넣어야 하는 번거로움을 없앤다. include 파일 경로로 사용한다. 
+```html
+{% include "header.html" %}
+<main>
+    <h1>메인 파일</h1>
+    <p>다른 파일을 include 할 수 있다.</p>
+</main>
+{% include "footer.html" %}
+```
+
+#### extends 와 block
+레이아웃을 정할 수 있다. 공통되는 레이아웃 부분을 따로 관리할 수 있어 좋다. include와도 함께 사용되곤 한다.
+
+레이아웃이 될 파일에은 공통된 마크업을 넣되, 페이지마다 달라지는 부분을 block으로 비워둔다. block은 여러 개 만들어도 된다. block을 선언하는 방법은 {% block [블록명]%}이다. {% endblock %}로 블록을 종료한다.
+
+block이 되는 파일에서는 {% extends 경로 %} 키워드로 레이아웃 파일을 지정하고 block 부분을 넣는다. 나중에 익스프레스에서 res.render('body')를 사용해 하나의 HTML로 합친 후 렌더링할 수 있다. 같은 이름의 block 부분이 서로 합쳐진다.
+
+### 에러 처리 미들웨어
