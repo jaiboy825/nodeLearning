@@ -486,7 +486,7 @@ UV_THREADPOOL_SIZE-8
 
 왼쪽이 환경 변수의 이름이고 오른쪽이 값이다.
 
-process.env는 서비스의 중요한 키를 저장하는 공간으로도 사용되기에 서버나 데이터베이스의 비밀번호와 각종 API 키를 코드에 직접 입력하는 것은 위험하다. 따라서 중요한 비밀번호는 process.env의 속성에
+process.env는 서비스의 중요한 키를 저장하는 공간으로도 사용되기에 서버나 데이터베이스의 비밀번호와 각종 API 키를 코드에 직접 입력하는 것은 위험하다. 따라서 중요한 비밀번호는 process.env의 속성에 넣어두는 것이 안전하다.
 ```js
 const secretId = process.env.SECRET_ID;
 const secretCode = process.env.SECRET_CODE
@@ -1972,3 +1972,389 @@ HTML 을 이스케이프 하고 싶지 않다면 {{변수 | safe}}를 사용한�
 block이 되는 파일에서는 {% extends 경로 %} 키워드로 레이아웃 파일을 지정하고 block 부분을 넣는다. 나중에 익스프레스에서 res.render('body')를 사용해 하나의 HTML로 합친 후 렌더링할 수 있다. 같은 이름의 block 부분이 서로 합쳐진다.
 
 ### 에러 처리 미들웨어
+에러 처리 미들웨어는 error 라는 템플릿 파일을 렌더링한다. 렌더링 시 res.locals.message 와 res.locals.error에 넣어준 값을 함께 렌더링 한다. res.render에 변수를 대입하는 것 외에도 res.locals 속성에 값을 대입하여 템플릿 엔진 변수를 주입할 수 있다.
+
+error 객체의 스택 트레이스는 시스템 환경이 production이 아닌 경우에만 표시된다. 배포 환경인 경우에는 에러 메시지만 표시된다. 에러 스택 트레이스가 노출되면 보안에 취약할 수 있기 때문이다. 
+
+<hr>
+
+# MySQL
+(저자의 말) 위 내용까지는 모든 데이터를 변수에 저장했습니다. 변수에 저장했다는 것은 컴퓨터 메모리에 저장했다는 뜻입니다. 서버가 종료되면 메모리가 정리되면서 저장했던 데이터도 사라져버립니다. 이를 방지하기 ㅜ이해서는 데이터베이스를 사용해야 합니다. 
+
+다양한 데이터베이스가 있지만, 이 책에서는 MySQL과 몽고디비를 사용합니다. MySQL은 SQL 언어를 사용하는 관계형 데이터베이스 관리 시스템의 대표 주자고, 몽고디비는 NoSQL의 대표 주자입니다.
+
+### 데이터베이스란
+데이터베이스는 관련성을 가지며 중복이 없는 데이터들의 집합이다. 이러한 데이터베이스를 관리하는 시스템을 DBMS라고 부른다. 보통 서버의 하드 디스크나 SSD 등의 저장 매체에 데이터를 저장한다. 저장 매체가 고장나거나 사용자가 직접 데이터를 지우지 않는 이상 계속 데이터가 보존되므로 서버 종료 여부와 상관없이 데이터를 지속적으로 사용할 수 있다.
+
+또한, 서버에 데이터베이스를 올리면 여러 사람이 동시에 사용할 수 있다. 사람들에게 각각 다른 권한을 줘서 어떤 사람은 읽기만 가능하고, 어떤 사람은 모든 작업을 가능하게 할 수 있다.
+
+데이터베이스를 관리하는 DBMS 중에서 RDBMS라고 부르는 관계형 DBMS가 많이 사용된다. 대표적인 RDBMS로는 Oracle, MySQL, MSSQL 등이 있다. 이들은 SQL 이라는 언어를 사용해 데이터를 관리한다. 하지만 RDBMS 별로 SQL 문이 조금씩 다르다.
+
+### MySQL 설치하기
+#### 윈도우 
+MySQL 의 공식 사이트 (https://dev.mysql.com/downloads/installer/)에서 Download 버튼을 눌러 인스톨러를 내려 받고 비밀번호 버전 등의 선택 후 설치를 하면 된다.
+
+#### 맥
+
+```
+$ brew install mysql
+$ brew services start mysql
+$ mysql_secure_installation
+```
+
+만약 brew servicdes start mysql 에서 bootstrap 에러가 나온다면 서비스를 멈추고, 삭제 후 재 설치
+```
+$ brew services stop mysql
+$ brew uninstall mysql
+$ rm -rf /usr/local/var/mysql
+$ rm /usr/local/etc/my.cnf
+```
+이렇게 작성하면 깔끔하게 mysql을 삭제할 수 있다. 이후 재 설치
+
+mysql_secure_installation 을 입력하고 비밀번호를 설정해주면 된다.
+
+실행은 
+```
+$ mysql -h localhost -u root -p
+Enter password: 비밀번호
+mysql>
+```
+
+#### 리눅스(우분투)
+우분투에서는 GUI를 사용하지 않으므로 명령어를 순서대로 입력하여 설치한다
+```
+$ sudo apt-get update
+$ sudo apt-get install -y mysql-server
+$ sudo mysql_secure_installation
+```
+
+MySQL을 설치하는 과정에서 root 사용자의 비밀번호도 설정한다. 입력한 비밀번호를 기억해두어야 나중에 MySQL 서버에 접속할 수 있다.
+
+혹시 비밀번호 설정 화면이 나오지 않고 설치가 완료된다면 비밀번호가 없는 상태가 된다. 이럴 경우에는 mysqladmin -u root -p password 비밀번호 명령어로 비밀번호를 설정할 수 있다. 명령어를 실행하고 나면 비밀번호를 묻는데 없는 경우에는 엔터를 치면 된다.
+
+실행은 
+```
+$ mysql -h localhost -u root -p
+Enter password : 비밀번호
+mysql>
+```
+<hr>
+
+### 워크벤치 설치하기
+콘솔로는 데이터를 한눈에 보기에 무리가 있는데, 워크벤치라는 프로그램을 사용하면 데이터베이스 내부에 저장된 데이터를 시각적으로 관리할 수 있어 편리하다. 하지만 꼭 필요한 것은 아니다.
+
+- 윈도우 : 인터넷에서 찾아서 설치
+- 맥 : brew install --cask mysqlworkbench
+- 리눅스 : gui를 사용하지 않으므로 설치할 필요 없다
+
+### 커넥션 생성하기
+윈도우나 맥에서 워크벤치를 설치했다면 실행해서 + 버튼 누르고 localhost랑 비번 아까 적은거 써서 설정 하고 실행하면 된다.
+
+<hr>
+
+### 데이터베이스 및 테이블 생성하기
+
+#### 데이터베이스 생성하기
+MySQL 프롬프트에 접속한다. CREATE SCHEMA [데이터베이스명]이 데이터베이스를 생성하는 명령어이다. SCHEMA라고 되어 있는데, MySQL에서 데이터베이스와 스키마는 같은 개념이다. nodejs라는 이름의 데이터베이스를 생성한다. 그 후 use nodejs; 명령어를 추가로 입력하여 앞으로 nodejs 데이터베이스를 사용하겠다는 것을 MySQL에 알린다.
+
+```
+mysql> CREATE SCHEMA `nodejs` DEFAULT CHARACTER SET utf8;
+Query OK, 1 row affected (0.01sec)
+
+mysql> use nodejs;
+Database changed
+```
+
+### 테이블 생성하기
+데이터베이스를 생성했다면 테이블을 만든다. 테이블이란 데이터가 들어갈 수 있는 틀을 의미하며, 테이블에 맞는 데이터만 들어갈 수 있다. 사용자의 정보를 저장하는 테이블을 만들어보겠다.
+
+프롬프트에 작성 (자세한 내용은 적지 않도록 하겠다. 잘 알고 있는 내용이라..)
+
+### CRUD 작업하기
+Create, Read, Update, Delete의 첫 글자를 모은 두분자어이며 데이터베이스에서 많이 수행하는 네 가지 작업을 일컫는다. 그 방법만 익혀도 웬만한 프로그램은 다 만들 수 있을 정도로 CRUD 작업은 많이 사용된다.
+
+#### Create (생성)
+Create는 데이터를 생성해서 데이터베이스에 넣는 작업이다. use nodejs; 명령어를 사용했다면 테이블명으로 nodejs.users 대신 users 만 사용해도 된다.
+```sql
+INSERT INTO comment (commenter, comment) values (1, '안녕하세요, zero의  댓글입니다.');
+```
+
+#### Read (조회)
+Read는 데이터베이스에 있는 데이터를 조회하는 작업이다.
+
+```sql
+SELECT * FROM nodejs.users;
+```
+and나 or 같은 내용은 생략하겠다
+
+#### Update (수정)
+Update는 데이터베이스에 있는 데이터를 수정하는 작업이다. 
+```sql
+UPDATE users SET comment = '바꿀 내용' WHERE id = 2;
+```
+
+#### Delete (삭제)
+Delete는 데이터베이스에 있는 데이터를 삭제하는 작업이다.
+
+```sql
+DElETE FROM users WHERE id = 2;
+```
+
+### 시퀄라이즈 사용하기
+(저자의 말)
+MySQL 작업을 쉽게 할 수 있도록 도와주는 라이브러리가 있다. 바로 시퀄라이즈 이다.
+
+시퀄라이즈는 ORM(Object-relational Mapping) 으로 분류된다. ORM은 자바스크립트 객체와 데이터베이스의 릴레이션을 매핑해주는 도구이다.
+
+시퀄라이즈를 오로지 MySQL과 같이 써야만 하는 것은 아니다. 다른 데이터베이스도 같이 쓸 수 있다. 문법이 어느 정도 호환되므로 프로젝트를 다른 SQL 데이터베이스로 전환할 때도 편리하다.
+
+시퀄라이즈를 쓰는 이유는 자바스크립트 구문을 알아서 SQL로 바꿔주기 때문이다. 따라서 SQL 언어를 직접 사용하지 않아도 자바스크립트만으로 조작할 수 있고, SQL을 몰라도 어느정도 다룰 수 있게 된다. 물론 모르는 채로 사용하는 것은 권장하지 않는다.
+
+```console
+$ npm i express morgan nunjucks sequelize sequelize-cli mysql2
+$ npm i -D nodemon
+```
+
+sequelize-cli는 시퀄라이즈 명령어를 실행하기 위한 패키지이고, mysql2는 mysql과 시퀄라이즈를 이어주는 드라이버이다. mysql2 자체가 데이터베이스 프로그램은 아니므로 오해하면 안 된다.
+
+설치 완료 후 sequelize init 명령어를 호출하면 된다. 전역 설치 없이 명령어로 사용하려면 앞에 npx를 붙이면 된다.
+
+```
+$ npx sequelize init
+```
+
+models/index.js
+```js
+const Sequelize = require('sequelize');
+
+const env = process.env.NODE_ENV || 'development';
+const config = require(__dirname + '/../config/config.json')[env];
+const db = {};
+
+const sequelize = new Sequelize(config.database, config.username, config.password, config);
+
+db.sequelize = sequelize;
+
+module.exports = db;
+```
+
+Sequelize는 시퀄라이즈 패키지이자 생성자 이다. config/config.json에서 데이터베이스 설정을 불러온 후 new Sequelize 를 통해 MySQL 연결 객체를 생성한다. 연결 객체를 나중에 재사용 하기 위해 db.sequelize에 넣어두었다.
+
+#### MySQL 연결하기
+시퀄라이즈를 통해 익스프레스 앱과 MySQL을 연결해야 한다. app.js를 생성하고 연결 코드를 작성한다.
+
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const nunjucks = require('nunjucks');
+
+const {sequelize} = require('./models');
+
+const app = express();
+app.set('port', process.env.PORT || 3000);
+app.set('view engine', 'html');
+nunjucks.configure('views', {
+    express: app,
+    watch: true
+});
+
+sequelize.sync({force: false})
+.then(() => {
+    console.log('db 연결 성공')
+})
+.catch(err => {
+    console.error(err);
+});
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.join());
+app.use(express.urlencoded({extended: false}));
+
+app.use((req, res, next) => {
+    const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+    error.status = 404;
+    next(error);
+});
+
+app.use((err, req, res, next) => {
+    res.locals.message = err.message;
+    res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+    res.status(err.status || 500);
+    res.render(err);
+});
+
+app.listen(app.get('port'), () => {
+    console.log(app.get('port'), '번 포트에서 대기 중');
+})
+```
+
+require('./models')는 index.js를 생략한 것, db.sequelize 를 불러와서 sync 메서드를 사용해 서버 실행 시 MySQL과 연동되도록 했다. 내부에 force:false 옵션이 있는데 이 옵션을 true로 설정해면 서버 실행 시마다 테이블을 재생성 한다. 테이블을 잘못 만든 경우에 true로 설정하면 된다.
+
+MySQL과 연동할 때는 config 폴더 안의 config.json 정보가 사용한다. 다음과 같이 수정한다. 자동 생성한 config.json에 operator Aliases 속성이 들어 있다면 삭제한다.
+
+development.password와 development.database를 현재 MySQL 커넥션과 일치하게 수정하면 된다. test와 production 쪽은 각각 테스트 용도와 배포 용도로 접속하기 ㅜ이해 사용되는 것이므로 여기서는 설정하지 않는다. 
+
+password 속성에는 mysql 비밀번호를 입력하고, database 속성에는 nodejs를 입력한다.
+
+이 설정은 process.env.NODE_ENV가 development일 때 적용된다. 나중에 배포할 때는 process.env.NODE_ENV를 production으로 설정해둔다. 따라서 배포 환경을 위해 데이터베이스를 설정할 때는 config/config.json의 production 속성을 수정하면 된다. 마찬가지로 테스트 환경일 때는 test 속성을 수정한다.
+
+npm start로 서버를 시작하면 3000번 포트에서 서버가 돌아간다. 라우터를 만들지 않았기에 실제로 접속할 수는 없지만 로그가 뜬다
+```
+Executing(default): SELECT 1+1 AS result
+데이터베이스 연결 성공
+```
+이렇게 두 로그가 뜨면 연결이 성공한 것이다. 연결에 실패한 경우 에러 메시지가 로깅된다.
+에러는 주로 MySQL 데이터베이스를 실행하지 않았거나, 비밀번호를 틀렸거나, 설정 파일을 못 불러왔을 때 발생한다.
+
+#### 모델 정의하기
+MySQL에서 정의한 테이블을 시퀄라이즈에서도 정의해야 한다. MySQL의 테이블은 시퀄라이즈의 모델과 대응된다. 시퀄라이즈는 모델과 MySQL의 테이블을 여결해주는 역할을 한다. User와 Comment 모델을 만들어 users 테이블과 comments 테이블에 연결해보겠다. 시퀄라이즈는 기본적으로 모델 이름은 단수형으로, 테이블 이름은 복수형으로 사용한다.
+
+models/user.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class User extends Sequelize.Model {
+  static init(sequelize) {
+    return super.init({
+      name: {
+        type: Sequelize.STRING(20),
+        allowNull: false,
+        unique: true,
+      },
+      age: {
+        type: Sequelize.INTEGER.UNSIGNED,
+        allowNull: false,
+      },
+      married: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+      },
+      comment: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.NOW,
+      },
+    }, {
+      sequelize,
+      timestamps: false,
+      underscored: false,
+      modelName: 'User',
+      tableName: 'users',
+      paranoid: false,
+      charset: 'utf8',
+      collate: 'utf8_general_ci',
+    });
+  }
+
+  static associate(db) {
+    db.User.hasMany(db.Comment, { foreignKey: 'commenter', sourceKey: 'id' });
+  }
+};
+```
+
+User 모델을 만들고 모듈로 exports했다. User 모델은 Sequelize.Model 을 확장한 클래스로 선언한다. 클래스 문법을 사용하지만 클래스에 대한 지식이 없어도 사용할 수 있다. 패턴만 숙지하면 된다. 모델은 크게 static init 메서드와 static associate 메서드로 나뉜다.
+
+init 메서드에는 테이블에 대한 설정을 하고, associate 메서드에는 다른 모델과의 관계를 적는다. init 메서드부터 살펴보면, super.init 메서드의 첫 번째 인수가 테이블 컬럼에 대한 설정이고, 두 번째 인수가 테이블 자체에 대한 설정이다.
+
+시퀄라이즈는 알아서 id를 기본 키로 연결하므로 id 컬럼은 적어줄 필요가 없다. 나머지 컬럼의 스펙을 입력한다. MySQL 테이블과 컬럼 내용이 일치해야 정확하게 대응된다.
+
+단, 시퀄라이즈 자료형은 MySQL의 자료형과는 조금 다르다. VARCHAR는 STRING, INT는 INTEGER, TYNYINT는 BOOLEAN으로, DATETIME은 DATE로 적는다. 
+
+allowNull은 NOT NULL 옵션과 동일하다. unique 는 UNIQUE 옵션이다. defaultValue는 기본값을 의미하며, Sequelize.NOW로 현재 시간을 기본값으로 사용할 수 있다. SQL의 now()와 같다.
+
+super.init 메서드의 두 번째 인수는 테이블 옵션이다.
+
+- sequelize : static init 메서드의 매개변수와 연결되는 옵션으로 db.sequelize 객체를 넣어야 한다. 나중에 model/index.js 에서 연결한다.
+- timestamps : 이 속성 값이 true면 시퀄라이즈는 createdAt과 updatedAt 컬럼을 추가한다. 각각 로우가 생서오딜 때와 수정될 때의 시간이 자동으로 입력된다. 하지만 예제에서는 직접 created_at 컬럼을 만들었으므로 timestamps 속성이 필요 하지 않다. 따라서 속성값을 false로 하여 자동으로 날짜 컬럼을 추가하는 기능을 해제했다.
+- underscored : 시퀄라이즈는 기본적으로 테이블명과 컬럼명을 캐멀 케이스로 만든다. 이를 스네이크 케이스로 바꾸는 옵션이다.
+- modelName : 모델 이름을 설정할 수 있다. 노드 프로젝트에서 사용한다.
+- tableName : 실제 데이터베이스의 테이블 이름이 된다. 기본적으로 모델 이름을 소문자 및 복수형으로 만든다. 모델 이름이 User라면 테이블 이름은 users가 된다.
+- paranoid : true 로 설정하면 deletedAt 이라는 컬럼이 생긴다. 로우를 삭제할 때 완전히 지워지지 않고 deletedAt 에 지운 시각이 기록된다. 로우를 조회하는 명령을 내렸을 때는 deletedAt의 값이 null인 로우를 조회한다. 이렇게 하는 이유는 나중에 로우를 복원하기 위해서이다. 로우를 복원해야 하는 상황이 생길 것 같다면 미리 true로 설정해두면 된다.
+- charset 과 collate : 각각 utf8과 utf8_general_ci 로 설정해야 한글이 입력된다. 이모티콘까지 입력할 수 있게 하고 싶다면 utf8mb4와 utf8mb4_general_ci를 입력한다.
+
+Comment 모델도 만들어보자
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class Comment extends Sequelize.Model {
+  static init(sequelize) {
+    return super.init({
+      comment: {
+        type: Sequelize.STRING(100),
+        allowNull: false,
+      },
+      created_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+        defaultValue: Sequelize.NOW,
+      },
+    }, {
+      sequelize,
+      timestamps: false,
+      modelName: 'Comment',
+      tableName: 'comments',
+      paranoid: false,
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_general_ci',
+    });
+  }
+
+  static associate(db) {
+    db.Comment.belongsTo(db.User, { foreignKey: 'commenter', targetKey: 'id' });
+  }
+};
+```
+
+Comment 모델은 commenter 컬럼이 없다. 이 부분은 모델을 정의할 때 넣어도 되지만, 시퀄라이즈 자체에서 관계를 따로 정의할 수 있다. 
+
+models/index.js
+```js
+const Sequelize = require('sequelize');
+const User = require('./user');
+const Comment = require('./comment');
+
+const env = process.env.NODE_ENV || 'development';
+const config = require('../config/config')[env];
+const db = {};
+
+const sequelize = new Sequelize(config.database, config.username, config.password, config);
+
+db.sequelize = sequelize;
+db.Sequelize = Sequelize;
+
+db.User = User;
+db.Comment = Comment;
+
+User.init(sequelize);
+Comment.init(sequelize);
+
+User.associate(db);
+Comment.associate(db);
+
+module.exports = db;
+```
+
+db라는 객체에 User와 Comment 모델을 담아두었다. db 객체를 require하여 User와 Comment 모델에 접근할 수 있다. User.init과 Comment.init은 각각의 모델의 static.init 메서드를 호출하는 것이다. init이 실행되어야 테이블이 모델로 연결된다. 다른 테이블과의 관계를 연결하는 associate 메서드도 미리 실행해둔다.
+
+#### 관계 정의하기
+(저자의 말)
+사용자 한 명은 댓글을 여러 개 작성할 수 있다. 하지만 댓글 하나에 사용자가 여러 명일 수는 없다. 이러한 관계를 일대다 관계라고 한다. 1:N 관계에서는 사용자가 1이고, 댓글이 N이다.
+
+다른 관계로 일대일, 다대다 관계가 있다. 일대일 관계로는 사용자와 사용자에 대한 정보 테이블을 예로 들 수 있다. 사용자 한 명은 자신의 정보를 담고 있는 테이블과만 관계가 있다. 정보 테이블도 한 사람만을 가리킨다. 이러한 관계를 일대일 관계라고 부른다. 
+
+다대다 관계로는 게시글 테이블과 해시태그 테이블 관계를 예로 들 수 있다. 한 게시글에는 해시태그가 여러 개 달릴 수 있고, 한 해시태그도 여러 게시글에 달릴 수 있다. 이러한 관계를 다대다 관계라고 한다.
+
+MySQL 에서는 JOIN이라는 기능으로 여러 테이블 간의 관계를 파악해 결과를 도출한다. 시퀄라이즈는 JOIN 기능도 알아서 구현한다. 대신 테이블 간에 어떠한 관계가 있는지 시퀄라이즈에 알려야 한다.
+
+##### 1:N
+시퀄라이즈에서는 1:N 관계를 hasMany 라는 메서드로 표현한다. users 테이블의 로우 하나를 불러올 때 연결된 comments 테이블의 로우들도 같이 불러올 수 있다. 반대로 belongsTo 메서드도 있다. comments 테이블의 로우를 불러올 때 연결된 users 테이블의 로우를 가져온다.
+
+어떤 모델에 hasMany를 쓰고, 어떤 모델에 belongsTo를 쓰는지 헷갈릴텐데, 다른 모데르이 정보가 들어가는 테이블에 belongsTo를 사용한다. 예제에서는 commenter 컬럼이 추가되는 Comment 모델에 belongsTo를 사용하면 된다. 사용자는 한 명이고, 그에 속한 댓글은 여러 개 이므로 댓글 로우에 사용자가 누구인지 적어야 한다.
+
+시퀄라이즈는 위에서 정의한 대로 모델 간 관계를 파악해서 Comment 모델에 foreignKey 인 Commenter 컬럼을 추가한다. Commenter 모델의 외래 키 컬럼은 commenter고, User 모델의 id 컬럼을 가리키고 있다.
