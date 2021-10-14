@@ -1,4 +1,4 @@
-# 노드공부인것이다.
+# 노드공부 , 대부분의 글은 교재에 있는 글을 좀 추리면서 작성한 것으로 중간중간에 생각을 적었습니다.
 
 ## node 핵심 개념
 ### 서버
@@ -2355,6 +2355,1047 @@ MySQL 에서는 JOIN이라는 기능으로 여러 테이블 간의 관계를 파
 ##### 1:N
 시퀄라이즈에서는 1:N 관계를 hasMany 라는 메서드로 표현한다. users 테이블의 로우 하나를 불러올 때 연결된 comments 테이블의 로우들도 같이 불러올 수 있다. 반대로 belongsTo 메서드도 있다. comments 테이블의 로우를 불러올 때 연결된 users 테이블의 로우를 가져온다.
 
-어떤 모델에 hasMany를 쓰고, 어떤 모델에 belongsTo를 쓰는지 헷갈릴텐데, 다른 모데르이 정보가 들어가는 테이블에 belongsTo를 사용한다. 예제에서는 commenter 컬럼이 추가되는 Comment 모델에 belongsTo를 사용하면 된다. 사용자는 한 명이고, 그에 속한 댓글은 여러 개 이므로 댓글 로우에 사용자가 누구인지 적어야 한다.
+어떤 모델에 hasMany를 쓰고, 어떤 모델에 belongsTo를 쓰는지 헷갈릴텐데, 다른 모델의 정보가 들어가는 테이블에 belongsTo를 사용한다. 예제에서는 commenter 컬럼이 추가되는 Comment 모델에 belongsTo를 사용하면 된다. 사용자는 한 명이고, 그에 속한 댓글은 여러 개 이므로 댓글 로우에 사용자가 누구인지 적어야 한다.
 
 시퀄라이즈는 위에서 정의한 대로 모델 간 관계를 파악해서 Comment 모델에 foreignKey 인 Commenter 컬럼을 추가한다. Commenter 모델의 외래 키 컬럼은 commenter고, User 모델의 id 컬럼을 가리키고 있다.
+
+hasMany 메서드에서는 sourceKey 속성에 id를 넣고, belongsTo 메서드에서는 targetKey 속성에 id를 넣는다. sourceKey의 id와 targetKey의 id 모두 User 모델의 id 이다. hasMany에서는 sourceKey를 쓰고, belongsTo 에서는 targetKey를 쓴다고 생각하면 된다.
+
+foreignKey를 따로 지정하지 않는다면 이름이 모델명 + 기본 키인 컬럼이 모델에 생성된다. 예를 들어 commenter를 foreignKey로 직접 넣어주지 않았다면 user+ 기본키 가 합쳐진 UserId가 foreignKey로 생성된다.
+
+시퀄라이즈는 워크벤치가 테이블을 만들 때 실행했던 구문과 비슷한 SQL문을 만든다. create table 뒤에 if not exists라고 되어 있는데, 이 부분은 테이블이 존재하지 않을 경우에 실행된다는 뜻이다. 이미 워크벤치 또는 콘솔로 테이블을 만들어두었으므로 구문은 실행되지 않는다. 대신 실수로 테이블을 삭제했을 때는 위의 구문으로 인해 다시 테이블이 생성된다.
+
+##### 1:1
+1:1 관계에서는 hasMany 메서드 대신 hasOne 메서드를 사용한다. 사용자 정보를 담고 있는 가상의 Info 모델이 있다고 하면 
+```js
+db.User.hasOne(db.Info, {foreignKey: 'UserId', sourceKey : 'id'});
+db.Info.belongsTo(db.User, {foreignKey: 'UserId', sourceKey : 'id'});
+```
+이렇게 표현할 수 있다. 
+1:1 관계라고 해도 belongsTo 와 hasOne이 반대면 안된다. belongsTo를 사용하는 Info 모델에 UserId 컬럼이 추가되기 때문이다. 
+
+##### N:M 
+시퀄라이즈에는 N:M 관계를 표현하기 위한 belongsToMany 메서드가 있다. 게시글 정보를 담고 있는 가상의 Post 모델과 해시태그 정보를 담고 있는 가상의 Hashtag 모델이 있다고 하면 
+```js
+db.Post.belongsToMany(db.Hashtag, {through: 'PostHashtag'});
+db.Post.belongsToMany(db.Post, {through: 'PostHashtag'});
+```
+이렇게 표현할 수 있다.
+양쪽 모델에 모두 belongsToMany 메서드를 사용한다. N:M 관계의 특성상 새로운 모델이 생성된다. through 속성에 그 이름을 적으면 된다. 새로 생성된 PostHashtag 모델에는 게시글과 해시태그의 아이디가 저장된다.
+
+N:M에서는 데이터를 조회할 때 여러 단계를 거쳐야 한다. #노드 해시태그를 사용한 게시물을 조회하는 경우를 생각해보겠다. 먼저 #노드 해시태그를 Hashtag 모델에서 조회하고, 가져온 태그의 아이디를 바탕으로 PostHashtag 모델에서 hashtagId가 1인 postId들을 찾아 Post 모델에서 정보를 가져온다.
+
+자동으로 만들어진 모델들도 다음과 같이 접근할 수 있다.
+```js
+db.sequelize.models.PostHashing
+```
+
+#### 쿼리 알아보기
+시퀄라이즈로 CRUD 작업을 하려면 먼저 시퀄라이즈 쿼리를 알아야 한다. SQL문을 자바스크립트로 생성하는 것이라 시퀄라이즈 만의 방식이 있다. 쿼리는 프로미스를 반환하므로 then을 붙여 결괏값을 받을 수 있다. async/await 문법 과 같이 사용할 수도 있다. 
+
+로우를 생성하는 쿼리부터 알아보겠다. 첫 줄이 SQL문이고, 그 아래는 시퀄라이즈 쿼리 이다.
+
+```SQL
+INSERT INTO nodejs.users (name, age, married, comment) VALUES ('zero', 24, 0, '자기소개1')
+```
+```js
+const {User} = require('../models');
+User.create({
+  name:'zero',
+  age : 24,
+  married : false,
+  comment : '자기소개1'
+})
+```
+
+models 모듈에서 User 모델을 불러와 create 메서드를 사용하면 된다. 앞으로 나올 메서드들은 User 모델에서 불러왔다는 전제로 한다.
+
+한 가지 주의할 점은 데이터를 넣을 때 MySQL의 자료형이 아니라 시퀄라이즈 모델에 정의한 자료형대로 넣어야 한다는 것이다. 이것이 married 가 0이 아니라 false인 이유이다. 시퀄라지으가 알아서 MySQL 자료형으로 바꾼다. 자료형이나 옵션에 부합하지 않는 데이터를 넣었을 때는 시퀄라이즈가 에러를 발생시킨다. 
+
+users 테이블의 모든 데이터를 조회하는 SQL 문이다. findAll 메서드를 사용하면 된다.
+
+```sql
+SELECT * FROM nodejs.users;
+User.findAll({})
+```
+다음은 Users 테이블의 데이터 하나만 가져오는 SQL 문이다. 앞으로 데이터를 하나만 가져올 때는 findOne 메서드를, 여러 개 가져올 때는 findAll 메서드를 사용한다고 보면 된다.
+
+```sql
+SELECT * FROM nodejs.users LIMIT 1;
+User.findOne({})
+```
+attributes 옵션을 사용해서 원하는 컬럼만 가져올 수도 있다.
+```sql 
+SELECT name, married FROM nodejs.users;
+
+User.findAll({
+  attributes: ['name', 'married']
+})
+```
+
+where 옵션이 조건들을 나열하는 옵션이다.
+
+```sql
+SELECT name, age FROM nodejs.users WHERE married = 1 AND age > 30;
+```
+```js
+const {Op} = require('sequelize');
+const {User} = require('../models');
+User.findAll({
+  attributes: ['name', 'age'];
+  where : {
+    married : true,
+    age : {[Op.gt]:30}
+  }
+});
+```
+
+MySQL에서는 undefined 라는 자료형을 지원하지 않으므로 where 옵션에는 undefined 가 들어가면 안된다. 빈 값을 넣고자 할 때는 null을 사용하면 된다.
+
+age부분은 시퀄라이즈가 자바스크립트 객체를 사용해서 쿼리를 생성해야 하므로 Op.gt 같은 특수한 연산자들이 사용된다. Sequelize 객체 내부의 Op 객체를 불러와 사용한다.
+
+자주 쓰이는 연산자로는 
+- Op.gt(초과)
+- Op.gte(이상)
+- Op.lt(미만)
+- Op.lte(이하)
+- Op.ne(같지 않음)
+- Op.or(또는)
+- Op.in(배열 요소 중 하나)
+- Op.notIn(배열 요소와 모두 다름)
+등이 있다. or를 사용해보자면
+
+```sql
+SELECT id, name FROM users WHERE married = 0 OR age > 30;
+```
+```js
+const {Op} = require('sequelize');
+const {User} = require('../models');
+User.findAll({
+  attributes : ['id', 'name'],
+  where : {
+    [Op.or]: [{married : false}, {age : {[Op.gt]:30}}]
+  }
+});
+```
+
+or 속성에 OR 연산을 적용할 쿼리들을 배열로 나열하면 된다.
+
+```sql
+SELECT id, name FROM users ORDER BY age DESC;
+```
+```js
+User.findAll({
+  attributes: ['id', 'name'],
+  order : [['age', 'DESC']]
+})
+```
+
+시퀄라이즈의 정렬 방식이며, order 옵션으로 가능하다. 배열 안에 배열이 있다는 점에 주의해야 한다. 정렬은 꼭 하나로 하는 게 아니라 컬럼 두 개 이상으로 할 수도 있기 때문이다. 
+
+다음은 조회할 로구 개수를 설정하는 방법이다. LIMIT 1 인 경우네느 findAll 대신 findOne 메서드를 사용해도 되지만, limit 옵션으로 할 수도 있다.
+```sql
+SELECT id, name FROM users ORDER BY age DESC LIMIT 1;
+```
+```js
+User.findAll({
+  attribute: ['id','name'],
+  order : [['age', 'DESC']],
+  limit: 1
+})
+```
+
+OFFSET 역시 offset 속성으로 구현할 수 있다.
+```sql
+SELECT id, name FROM users ORDER BY age DESC LIMIT 1 OFFSET 1;
+```
+```js
+User.findAll({
+  attribute: ['id','name'],
+  order : [['age', 'DESC']],
+  limit: 1,
+  offset: 1
+})
+```
+
+로우를 수정하는 쿼리이다.
+```sql
+UPDATE nodejs.users SET comment = '바꿀 내용' WHERE id = 2;
+```
+```js
+User.update({
+  comment: '바꿀 내용'
+}, {
+  where : {id: 2}
+})
+```
+update 메서드로 수정할 수 있다. 첫 번쨰 인수는 수정할 내용이고, 두 번쨰 인수는 어떤 로우를 수정할지에 대한 조건이다. where 옵션에 조건들을 적는다.
+
+로우를 삭제하는 쿼리이다.
+```sql
+DELETE FROM nodejs.users WHERE id =2;
+```
+```js
+User.destroy({
+  where : {id : 2}
+})
+```
+destroy 메서드로 삭제한다. where 옵션을 적는 것은 똑같다.
+
+##### 관계 쿼리
+findOne이나 findAll 메서드를 호출할 때 프로미스의 결과로 모델을 반환한다.
+
+```js
+const user = await User.findOne({});
+console.log(user.nick);
+```
+
+User 모델의 정보에도 바로 접근할 수 있지만 더 편리한 점은 관계 쿼리를 지원한다는 것이다. 
+MYSQL로 따지면 JOIN 기능이다. 현재 User 모델은 Comment 모델과 hasMany-belongsTo 관계가 맺어져 있다. 만약 특정 사용자를 가져오면서 그 사람의 댓글까지 모두 가져오고 싶다면 include 속성을 사용한다.
+
+```js
+const user = await User.findOne({
+  include : [{
+    model: Comment
+  }]
+});
+console.log(user.Comments);
+```
+
+어떤 모델과 관계가 있는지를 include 배열에 넣어주면 된다. 배열인 이유는 다양한 모델과 관계가 있을 수 있기 떄문이다. 댓글은 여러 개일 수 있으므로 user.Comments로 접근 가능하다. 또는 
+```js
+const user = await User.findOne({});
+const comments = await user.getComments();
+console.log(comments);
+```
+
+이렇게 접근할 수 있다.
+
+관계를 설정했다면 getComments 외에도 setComments(), addComment(), addComments(), removeComments() 메서드를 지원한다. 동사 뒤에 모델의 이름이 붙는 형식이다.
+
+동사 뒤의 모델 이름을 바꾸고 싶다면 관계 설정 시 as 옵션을 사용할 수 있다.
+```js
+db.User.hasMany(db.comment, {foreignKey:'commenter', sourceKey: 'id', as:'Answers'});
+
+const user = await User.findOne({});
+const comments = await user.getAnswers();
+console.log(comments);
+```
+
+as를 설정하면 include 시 추가되는 댓글 객체도 user.Answers로 바뀐다.
+
+include나 관계 쿼리 메서드에도 where 나 attributes 같은 옵션을 사용할 수 있다.
+
+```js
+const user = await User.findeOne({
+  include: [{
+    modle : Comment,
+    where : {
+      id: 1
+    },
+    attributes: ['id']
+  }]
+});
+
+const comments = await user.getComments({
+  where : {
+    id: 1
+  },
+  attributes: ['id']
+});
+``` 
+
+댓글을 가져올 때는 id 가 1인 댓글만 가져오고, 컬럼도 id 컬럼만 가져오도록 하고 있다. 
+관계 쿼리 시 조회는 위와 같이 하지만 수정, 생성 삭제 때는 조금 다른 점이 있다.
+
+```js
+const user = await User.findOne({});
+const comment = await Comment.create();
+await user.addComment(comment);
+await user.addComment(comment.id);
+```
+
+여러 개를 추가할 때는 배열로 추가할 수 있다.
+```js
+const user = await User.findOne({});
+const comment1 = await Comment.create();
+const comment2 = await Comment.create();
+await user.addComment([comment1, comment2]);
+```
+
+관계 쿼리 메서드의 인수로 추가할 댓글 모델을 넣거나 댓글의 아이디를 넣으면 된다. 수정이나 삭제도 마찬가지이다.
+
+##### SQL 쿼리하기
+만약 시퀄라이즈의 쿼릴르 사용하기 싫거나 어떻게 할지 모르겠다면 직접 SQL 문을 통해 쿼리할 수 있다.
+```js
+const [result, metadata] = await sequelize.query('SELECT * FROM comments');
+console.log(result);
+```
+웬만하면 시퀄라이즈의 쿼리를 사용하는 것을 추천하지만, 시퀄라이즈 쿼리로 할 수 없는 경우에는 위와 같이 하면 됩니다. - 저자의 말
+
+#### 쿼리 수행하기
+위에서 공부한 내용을 바탕으로 CRUD 작업을 해보겠다. 모델에서 데이터를 받아 페이지를 렌더링 하는 방법과 JSON 형식으로 데이터를 가져오는 방법을 알아보겠다.
+(이 프로그램은 교재에 있는 것)
+간단하게 사용자 정보를 등록하고, 사용자가 등록한 댓글을 가져오는 서버이다. 먼저 views 폴더를 만들고 그 안에 sequelize.html 과 error.html 파일을 만든다. ajax 를 사용해 서버와 통신할 것이다.
+
+그리고 public 폴더 안에 sequelize.js 파일도 만든다.
+
+라우터들을 미리 app.js에 연결한다.
+
+먼저 GET /로 접속했을 때의 라우터이다. User.findAll 메서드로 모든 사용자를 찾은 후, squelzie.html 을 렌더링할 때 결괏값인 users를 넣는다.
+
+시퀄라이즈는 프로미스를 기본적으로 지원하므로 async/await 과 try/catch 문을 사용해서 각각 조회 성공 시와 실패 시의 정보를 얻을 수 있다. 이렇게 미리 데이터베이스에서 데이터를 조회한 후 템플릿 렌더링에 사용할 수 있다. 
+
+다음은 user.js로 router.route 메서드로같은 라우트 경로는 하나로 묶었다.
+
+GET /users와 POST /users 주소로 요청이 들어올 때의 라우터이다. 각각 사용자를 조회하는 요청과 사용자를 등록하는 요청을 처리한다. GET / 에서도 사용자 데이터를 조회했지만, GET / users 에서는 데이터를 JSON 형식으로 반환한다는 것에 차이가 있다.
+
+GET /users/:id/comments 라우터에는 findAll 메서드에 옵션이 추가되어 있다. include 옵션에서 model 속성에는 User 모델을, where 속성에는 :id로 받은 아이디 값을 넣었다. :id 는 라우트 매개변수로 6.3절에서 설명했다. req.params.id로 값을 가져올 수 있다. GET /users/1/comments 라면 사용자 id가 1인 댓글을 불러온다. 조회된 댓글 객체에는 include 로 넣어준 사용자 정보도 들어 있으므로 작성자의 이름이나 나이 등을 조회할 수 있다.
+
+Comments.js
+```js
+const express = require('express');
+const { Comment } = require('../models');
+
+const router = express.Router();
+
+router.post('/', async (req, res, next) => {
+  try {
+    const comment = await Comment.create({
+      commenter: req.body.id,
+      comment: req.body.comment,
+    });
+    console.log(comment);
+    res.status(201).json(comment);
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+router.route('/:id')
+  .patch(async (req, res, next) => {
+    try {
+      const result = await Comment.update({
+        comment: req.body.comment,
+      }, {
+        where: { id: req.params.id },
+      });
+      res.json(result);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  })
+  .delete(async (req, res, next) => {
+    try {
+      const result = await Comment.destroy({ where: { id: req.params.id } });
+      res.json(result);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  });
+
+module.exports = router;
+```
+댓글에 관련된 CRUD 작업을 하는 라우터이다. POST /comments, PATCH /comments/:id, DELETE/comments/:id 를 등록하였다.
+
+POST /comments 라우터는 댓글을 생성하는 라우터이다. commenter 속성에 사용자 아이디를 넣어 사용자와 댓글을 연결한다.
+
+PATCH /comments/:id와 DELETE /comments/:id 라우터는 각각 댓글을 수정, 삭제하는 라우터이다. 수정과 삭제는 각각 update와 destroy 메서드를 사용한다.
+
+<hr>
+
+실행하고 작동하는 것을 보았는데, 확실히 mysql 연결하고 만드는 것을 보니까 이전에 했었던 것보다 체계적이고 안정적으로 만들 수 있다는 것을 느꼈고, 맥에서 mysql을 사용하는데에 있어 애를 먹었지만 터미널에 익숙해지다보니 
+앞으로 좀 더 능숙하게 할 수 있을것 같습니다.
+
+<hr>
+
+## 몽고디비
+(저자의 말)
+MySQL만 알고 있어도 많은 곳에서 사용할 수 있지만, 다른 유형의 데이터베이스인 몽고디비를 알아둔다면 더욱더 다양한 프로그램을 만들 수 있다.
+
+몽고디비의 특징 중 하나는 자바스크립트 문법을 사용한다는 것이다. 노드도 자바스크립트를 사용하므로 데이터베이스마저 몽고디비를 사용한다면 자바스크립트만 사용하여 웹 애플리케이션을 만들 수 있는 것이다. 하나의 언어만 사용하면 되므로 생산성도 매우 높습니다. 하지만 몽고 디비는 흔히 사용하는 RDBMS가 아니라 뚜렷한 NoSQL 이므로 특징을 잘 알고 사용해야 한다.
+
+### NoSQL vs SQL
+MySQL은 SQL을 사용하는 대표적인 데이터베이스이다. 반면에 SQL을 사용하지 않는 NoSQL이라고 부르는 데이터베이스도 있다. 몽고디비는 NoSQL의 대표 주자이다.
+
+SQL과 NoSQL은 여러 측면에서 다른데, 그 중에서 대표적인 몇 가지 차이점만 알아보겠다. 
+
+SQL
+- 규칙에 맞는 데이터 입력
+- 테이블 간 JOIN 지원
+- 안정성, 일관성
+- 용어
+
+NoSQL
+- 자유로운 데이터 입력
+- 컬렉션 간 JOIN 미지원
+- 확장성, 가용성
+- 용어
+
+NoSQL에는 고정된 테이블이 없다. 테이블에 상응하는 컬렉션이라는 개념이 있긴 하지만, 컬럼을 따로 정의하지는 않는다. MySQL은 id, name 등등의 컬럼들의 조건과 자료형을 정의하지만, 몽고디비는 그냥 테이블 하나만 뚝 만들고 끝이다. 어떠한 데이터든 들어갈 수 있다.
+
+몽고디비에는 MySQL과 달리 JOIN 기능이 없다. JOIN 을 흉내 낼 수는 있지만, 하나의 쿼리로 여러 테이블을 합치는 작업이 항상 가능하지는 않다. 동시에 쿼리를 수행하는 경우 쿼리가 섞여 예상치 못한 결과를 낼 가능성이 있다는 것도 단점이다.
+
+이러한 단점에도 사용하는 이유는 확장성과 가용성 떄문이다. 데이터의 일관성을 보장해주는 기능이 약한 대신, 데이터를 빠르게 넣을 수 있고 쉽게 여러 서버에 데이터를 분산할 수 있다.
+
+용어도 조금 다르다. MySQL의 테이블 로우 컬럼을 몽고디비에서는 각각 컬렉션 다큐먼트 필드라고 부른다.
+
+애플리케이션을 만들 때 꼭 한 가지 데이터베이스만 사용해야 하는 것은 아니다. 많은 기업이 SQL과 NoSQL을 동시에 사용하고 있따. 서로 다른 특징을 가지고 있기에 상황에 알맞은 곳에 사용하면 된다.
+
+### 몽고디비 설치하기
+몽고디비는 공식사이트에서 다운받을 수 있다.
+https://www.mongodb.com/download-center/community
+
+#### 윈도우 
+공식 사이트의 다운로드 화면에서 On-Premises를 선택하고, MongoDB Community Server 탭에서 Download 버튼을 눌러 파일을 내려받는다.
+
+내려받은 파일을 실행하면 설치 화면이 나타난다. 동의할거 하고 뭐 하고 하면 설치가 끝
+
+서버를 실행하기 전에 데이터가 저장될 폴더를 먼저 만든다. 윈도우의 경우 c 드라이브 아래 data 폴더를 만들고, 다시 그 안에 db 폴더를 만들면 된다.
+
+몽고디비가 설치된 경로로 이동해서 몽고디비를 실행한다. 폴더가 없으면 실행되지 않으므로 반드시 폴더를 먼저 만들어야 한다. 콘솔에서 mongod 명령어를 입력하여 몽고디비를 실행한다. 방화벽 관련 팝업이 뜨면 허용 버튼을 눌러 접속을 허가한다.
+
+에러 메시지가 없다면 성공이며 기본적으로 27017번 포트에서 실행된다. 
+
+```
+$ cd "설치된 경로"
+$ mongod
+
+waiting for connections on port 27017
+```
+
+몽고디비 프롬프트에 접속하려면 같은 폴더에서 콘솔을 하나 더 열어 mongo 명령어를 입력한다.
+
+프롬프트가 > 로 바뀌었다면 성공이다. 이 상황에서 누구나 몽고디비에 접속할 수 있으므로 관리자 계정을 추가한다.
+
+```cmd
+> use admin
+switched to db admin
+> db.createUser({user:이름, pwd: 비밀번호, roles: ['root']})
+```
+
+db.createUser 메서드로 계정을 생성할 수 있다. user에 사용자 이름을 넣고, pwd 자리에 사용할 비밀번호를 입력한다. 이 비밀번호는 기억하고 있어야 한다. roles로는 현재 모든 권한이 있는 root를 부여했다. 
+
+mongod를 입력했던 콘솔을 종료한 뒤 이번에는 mongod --auth 명령어로 접속한다. --auth는 로그인이 필요하다는 뜻이다.
+
+```
+mongod --auth
+```
+
+mongo admin -u 이름 -p  비밀번호 명령어로 접속한다.
+```
+mongo admin -u name -p pw
+```
+
+#### 맥
+맥에서는 Homebrew 를 통해 몽고디비를 설치하는 것이 좋다.
+```
+brew tap mongodb/brew
+brew install mongodb-community
+```
+
+실행은 
+```
+brew services start mongodb-community
+
+mongo
+```
+
+관리자 계정 추가는 
+```
+use admin
+db.createUser({ user: 'jai', pwd : '', roles: ['root']})
+
+vi /usr/local/etc/mongod.conf 를 하고 
+security: 
+  authorization: enabled 
+  이 두줄을 추가한다.
+
+  그리고 다시 실행한다.
+mongo admin -u 이름 -p 비밀번호 <- 이거로 관리자 접속
+```
+
+#### 리눅스(우분투)
+우분투에서는 GUI를 사용하지 않으므로 콘솔에 다음 명령어들을 순서대로 입력하여 몽고디비를 설치한다. 명령어가 수시로 변경되므로 공식 사이트를 참고하는 것이 좋다.
+
+이후 내용은 변경 사항이 있을 가능성이 있기도 하고 리눅스를 그리 자주 쓰는 편이 아니라 생략하도록 하겠다.
+
+### 컴퍼스 설치하기
+몽고디비는 관리 도구로 컴퍼스를 제공한다. 컴퍼스도 공식 사이트에서 내려받을 수 있다. 컴퍼스를 사용하면 GUI를 통해 데이터를 시각적으로 관리할 수 있어 편리하다. 하지만 꼭 필요하지는 않다.
+
+- 약간 MySQL에서 워크벤치같은 느낌느낌
+
+#### 윈도우
+윈도우는 몽고디비 설치 시 함께 설치하기에 생략
+
+#### 맥
+```
+brew cask install mongodb-compass-community // 이건 교재상이고 cask 사용법이 바뀌어서 다르게 설치
+brew install --cask mongodb-compass-community 이렇게 하는건데.. 
+```
+터미널에서 못찾는다고 하여서 공식사이트에서 버전에 맞게 설치하자
+
+#### 리눅스
+리눅스는 위에 몽고디비 설치와 같은 이유로 생략하겠다.
+
+#### 커넥션 생성하기
+컴퍼스 실행 후 New Connection 화면에서 Fill in connection fields individually를 클릭한다.
+
+Authentication을 Username / Password로 바꾸고, 몽고디비 계정 이름과 비밀번호를 입력한다.
+
+그리고 connect! 하면 접속이 된다.
+
+### 데이터베이스 및 컬렉션 생성하기
+
+데이터베이스를 만드는 명령어는 use [데이터베이스명] 이다.
+
+데이터베이스 목록을 확인하는 명령어는 show dbs이다.
+
+위에서 만든 데이터베이스는 데이터를 최소 한 개 이상 넣어야 목록에 표시된다.
+
+컬렉션은 따로 생성하지 않아도 된다. 다큐먼트를 넣는 순간 컬렉션도 자동으로 생성된다. 하지만 직접 생성하는 명령어가 있긴 하다. db.createCollection('users') 이다.
+
+생성한 컬렉션 목록을 확인하는 명령어는 show collections 이다.
+
+### CRUD 작업하기
+#### Create (생성)
+컬렉션에 컬럼을 정의하지 않아도 되므로 컬렉션에는 아무 데이터나 넣을 수 있다. 이러한 자유로움이 몽고디비의 장점이다. 단, 무엇이 들어올지 모른다는 단점도 있다.
+
+몽고디비의 자료형은 MySQL과는 조금 다르다. 기본적으로 자바스크립트 문법을 사용하므로 자바스크립트의 자료형을 따른다. Date나 정규표현식 같은 자바스크립트 객체를 자료형으로 사용할 수 있고, Binary Data, ObjectId, Int, Long, Decimal, Timestamp, JavaScript 등의 추가적인 자료형이 있다. Undefined와 Symbol은 몽고디비에서 자료형으로 사용하지 않는다. 추가적인 자료형 중에서 ObjectId 와 Binary Data, Timestamp 외에는 잘 사용되지 않는다. ObjectId는 MySQL에서 기본키로 쓰이는 값과 비슷한 역할을 한다고 생각하면 된다. 고유한 값을 가지므로 다큐먼트를 조회할 때 사용할 수 있다.
+
+db.컬렉션명.save(다큐먼트)로 다큐먼트를 생성할 수 있다. 자바스크립트 객체처럼 생성하면 된다. new Date()는 현재 시간을 입력하라는 뜻이다. 명령이 성공적으로 수행되었다면 WriteResult({ "nInserted":1})이라는 응답이 나온다. 다큐먼트 한 개가 생성되었다는 뜻이다. 실패했다면 에러 내용이 응답으로 온다.
+
+```
+db.users.find({name:'zero'},{_id: 1})
+```
+zero의 아이디가 ObjectId("머시깽이")라고 나왔다. 이 문자열은 사용자마다 다르다. 
+
+#### Read(조회)
+find({}) 는 컬렉션 내의 모든 다큐먼트를 조회하라는 뜻이다. 
+특정 필드만 조회하고 싶다면 옵션을 정해주면 된다.
+```
+db.users.find({}, {_id:0, name: 1, marreid: 1});
+```
+find 메서드의 두 번째 인수로 조회할 필드를 넣었다. 1 또는 true로 표시한 필드만 가져온다. _id 는 기본적으로 가져오게 되어 있으므로 0 또는 false를 입력해 가져오지 않도록 해야 한다.
+
+조회 시 조건을 주려면 첫 번째 인수 객체에 기입하면 된다.
+
+$gt는 시퀄라이즈의 쿼리와 비슷하다. 몽고 디비는 자바스크립트 객체를 사용해서 명령어 쿼리를 생성해야 하므로 $gt 같은 특수한 연산자가 사용된다 
+
+자주 쓰이는 연산자
+- $gt(초과)
+- $gte(이상)
+- $lt(미만)
+- $lte(이하)
+- $ne(같지 않음)
+- $or(또는)
+- $in(배열 요소 중 하나)
+
+몽고디비에서 OR 연산은 $or를 사용한다.
+
+정렬도 가능하다. sort 메서드를 사용하면 된다. .sort({조건 : -1 or 1}) 이런식으로 사용하면 된다. 1은 오름차순이고 -1은 내림차순이다.
+
+조회할 도큐먼투 개수를 설정할 수도 있다. limit 메서드를 사용하면 된다. .limit(조회할 개수) 이렇게 사용하면 된다.
+
+다큐먼트 개수를 설정하면서 몇 개를 건너뛸지 설정할 수도 있다. skip 메서드를 사용하면 된다. .skip(건너뛸 개수) 이런식으로 사용한다. 
+
+다른 쿼리도 많지만 이정도만 알면 예제는 풀 수 있다.
+
+#### Update(수정)
+교재에서 나온 데이터 수정문
+```
+db.users.update({name:'jai'}, {$set : {comment: '안녕하세요. 필드 바꾸기 입니다.'}})
+```
+첫 번째 객체는 수정할 다큐먼트를 지정하는 객체이고, 두 번쨰 객체는 수정할 내용을 입력하는 객체이다. $set이라는 연산자가 사용되었는데, 이 연산자는 어떤 필드를 수정할지 정하는 연산자이다. 만약 이 연산자를 사용하지 않고 일반 객체를 넣는다면 다큐먼트가 통쨰로 두 번쨰 인수로 주어진 객체로 수정되고 만다. 따라서 일부 필드만 수정하고 싶을 때는 반드시 $set 연산자를 지정해야 한다.
+
+수정에 성공했다면 첫 번쨰  객체에 해당하는 도튜먼트 수와 수정된 다큐먼트 수가 나온다.
+
+#### Delete(삭제)
+교재에서 나온 데이터 삭제문
+```
+db.users.remove({name : 'jeon'})
+```
+삭제할 다큐먼트에 대한 정보가 담긴 객체를 첫번째 인수로 제공하면 된다. 성공 시 삭제된 개수가 반환된다.
+
+### 몽구스 사용하기
+MySQL에 시퀄라이즈가 있다면 몽고디비에는 몽구스가 있다.
+
+몽구스는 시퀄라이즈와 달리 ODM이라고 불린다. 몽고디비는 릴레이션이 아니라 다큐먼트를 사용하므로 ORM이 아니라 ODM이다.
+
+몽고디비 자체가 이미 자바스크립트인데도 굳이 자바스크립트 객체와 매핑하는 이유가 궁금할텐데 그 이유는 몽고디비에 없어서 불편한 기능들을 몽구스가 보완해주기 떄문이다.
+
+먼저 스키마 라는 것이 생겼다. 몽고디비는 테이블이 없어서 자유롭게 데이터를 넣을 수 있지만, 때로는 자유로움이 불편함을 초대한다. 실수로 잘못된 자료형의 데이터를 넣을 수도 있고, 다른 다큐먼트에는 없는 필드의 데이터를 넣을 수도 있다. 몽구스는 몽고디비에 데이터를 넣기 전에 노드 서버 단에서 데이터를 한 번 필터링하는 역할을 한다.
+
+또한, MySQL에 있는 JOIN 기능을 populate라는 메서드로 어느 정도 보완한다. 따라서 관계가 있는 데이터를 쉽게 가져올 수 있다. 비록 쿼리 한 번에 데이터를 합쳐서 가져오는 것은 아니지만, 이 작업을 우리가 직접 하지 않아도 되므로 편리하다.
+
+ES2015 프로미스 문법과 강력하고 가독성이 높은 쿼리 빌더를 지원하는 것도 장점이다. 몽구스 실습을 위한 폴더를 만들겠다. 이름 : learn-mongoose
+
+#### 몽고디비 연결하기
+몽고디비는 주소를 사용해 연결한다. 주소 형식은 mongodb://[username:password@]host[:port][/[database][?options]]와 같다. [ ] 부분은 있어도 되고 없어도 됨을 의미한다.
+
+username 과 password에 몽고디비 계정 이름과 비밀번호를 넣는다. host가 localhost, port 가 27017, 계정이 있는 database 가 admin 이므로 주소는 mongodb://이름:비밀번호@localhost:27017/admin 이 된다.
+
+먼저 schemas 폴더를 루트 디렉터리에 생성한다. 폴더 안에 index.js 파일을 생성하고 
+```js
+const mongoose = require('mongoose');
+
+const connect = () => {
+    //----------- 1
+    if (process.env.NODE_ENV !== 'production') {
+        mongoose.set('debug', true);
+    }
+    //-----------1
+    //-----------2
+    mongoose.connect('mongodb://jai:032508@localhost:27017/admin', {
+        dbName: 'nodejs',
+        useNewUrlParser: true,
+        useCreateIndex: true
+    }, (error) => {
+        if (error) {
+            console.log('몽고디비 연결 에러', error)
+        } else {
+            console.log('몽고디비 연결 성공')
+        }
+    });
+};
+//-----------2
+//-----------3
+mongoose.connection.on('error', (error) => {
+    console.log('몽고디비 연결 에러', error);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.error('몽고디비 연결이 끊겼습니다. 연결을 재시도 합니다.');
+    connect();
+});
+//-----------3
+module.exports = connect;
+
+
+```
+
+1 : 개발 환경일 때만 콘솔을 통해 몽구스가 생성하는 쿼리 내용을 확인할 수 있게 하는 코드이다.
+
+2 : 몽구스와 몽고디비를 연결하는 부분이다. 몽고디비 주소로 접속을 시도한다. 접속을 시도하는 주소의 데이터베이스는 admin이지만, 실제로 사용할 데이터베이스는 nodejs이므로 두 번째 인수로 dbName 옵션을 줘서 nodejs 데이터베이스를 사용하게 했다. 마지막 인수로 주어진 콜백 함수를 통해 연결 여부를 확인한다. 
+
+- useNewUrlParser : true 와 useCreateIndex : true는 입력하지 않아도 되지만 콘솔에 경고 메시지가 뜨므로 넣었다.
+
+3 : 몽구스 커넥션에 이벤트 리스너를 달아두었다. 에러 발생 시 에러 내용을 기록하고, 연결 종료 시 재연결을 시도한다.
+
+app.js를 만들고 schemas/index.js와 연결한다.
+
+app.js
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const nunjucks = require('nunjucks');
+
+const connect = require('./schemas');
+const indexRouter = require('./routes/index');
+const usersRouter = require('./routes/users');
+const commentsRouter = require('./routes/comments');
+
+const app = express();
+app.set('port', process.env.PORT || 3002);
+app.set('view engine', 'html');
+nunjucks.configure('views', {
+  express: app,
+  watch: true,
+});
+connect();
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+app.use((req, res, next) => {
+  const error =  new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+  error.status = 404;
+  next(error);
+});
+
+app.use((err, req, res, next) => {
+  res.locals.message = err.message;
+  res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+  res.status(err.status || 500);
+  res.render('error');
+});
+
+app.listen(app.get('port'), () => {
+  console.log(app.get('port'), '번 포트에서 대기 중');
+});
+```
+#### 스키마 정의하기
+schemas 폴더에 user.js와 comment.js를 만든다.
+
+user.js
+```js
+const mongoose = require('mongoose');
+
+const {Schema} = mongoose;
+const userSchema = new Schema({
+name : {
+    type: String,
+    required: true,
+    unique: true
+},
+age : {
+    type : Number,
+    required: true,
+},
+married : {
+    type : Boolean,
+    required: true
+},
+comment : String,
+createdAt : {
+    type: Date,
+    default : Date.now
+}
+});
+
+module.exports = mongoose.model('User', userSchema);
+```
+
+몽구스 모듈에서 Schema 생성자를 사용해 스키마를 만든다. 시퀄라이즈에서 모델을 정의한느 것과 비슷하다. 필드를 각각 정의한다.
+
+몽구스는 알아서 _id를 기본 키로 생성하므로 _id 필드는 적어줄 필요가 없다. 나머지 필드의 스펙만 입력한다.
+
+몽구스 스키마의 특이한 점은 String, Number, Date, Buffer, Boolean, Mixed, ObjectId, Array를 값으로 가질 수 있다는 점이다. 몽고디비의 자료형과 조금 다르며, 편의를 위해 종류 수를 줄여두었다.
+
+위에 작성한 필드들을 각각에 맞게 설정한다. 
+
+comment.js
+```js
+const mongoose = require('mongoose');
+
+const {Schema} = mongoose;
+const {Types : {ObjectId}} = Schema;
+
+const commentSchema = new Schema({
+    commenter : {
+        type : ObjectId,
+        required : true,
+        ref : 'User'
+    },
+    comment : {
+        type : String,
+        required : true
+    }, 
+    createdAt : {
+        type : Date,
+        default : Date.now
+    }
+});
+
+module.exports = mongoose.model('Comment', commentSchema);
+```
+
+commenter 속성만 보면 된다. 자료형이 ObjectId이다. 옵션으로 ref 속성의 값이 User로 주어져 잇다. commenter 필드에 User 스키마의 사용자 ObjectId 가 들어간다는 뜻이다. 나중에 몽구스가 JOIN 과 비슷한 기능을 할 때 사용한다.
+
+#### 쿼리 수행하기
+
+views 폴더 안에 mongoose.html과 error.html 파일을 만든다.
+
+public 폴더 안에 mongoose.js 파일도 만든다.
+
+mongoose.js
+```js
+// 사용자 이름 눌렀을 때 댓글 로딩
+document.querySelectorAll('#user-list tr').forEach((el) => {
+    el.addEventListener('click', function () {
+      const id = el.querySelector('td').textContent;
+      getComment(id);
+    });
+  });
+  // 사용자 로딩
+  async function getUser() {
+    try {
+      const res = await axios.get('/users');
+      const users = res.data;
+      console.log(users);
+      const tbody = document.querySelector('#user-list tbody');
+      tbody.innerHTML = '';
+      users.map(function (user) {
+        const row = document.createElement('tr');
+        row.addEventListener('click', () => {
+          getComment(user._id);
+        });
+        // 로우 셀 추가
+        let td = document.createElement('td');
+        td.textContent = user._id;
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.textContent = user.name;
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.textContent = user.age;
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.textContent = user.married ? '기혼' : '미혼';
+        row.appendChild(td);
+        tbody.appendChild(row);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  // 댓글 로딩
+  async function getComment(id) {
+    try {
+      const res = await axios.get(`/users/${id}/comments`);
+      const comments = res.data;
+      const tbody = document.querySelector('#comment-list tbody');
+      tbody.innerHTML = '';
+      comments.map(function (comment) {
+        // 로우 셀 추가
+        const row = document.createElement('tr');
+        let td = document.createElement('td');
+        td.textContent = comment._id;
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.textContent = comment.commenter.name;
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.textContent = comment.comment;
+        row.appendChild(td);
+        const edit = document.createElement('button');
+        edit.textContent = '수정';
+        edit.addEventListener('click', async () => { // 수정 클릭 시
+          const newComment = prompt('바꿀 내용을 입력하세요');
+          if (!newComment) {
+            return alert('내용을 반드시 입력하셔야 합니다');
+          }
+          try {
+            await axios.patch(`/comments/${comment._id}`, { comment: newComment });
+            getComment(id);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+        const remove = document.createElement('button');
+        remove.textContent = '삭제';
+        remove.addEventListener('click', async () => { // 삭제 클릭 시
+          try {
+            await axios.delete(`/comments/${comment._id}`);
+            getComment(id);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+        // 버튼 추가
+        td = document.createElement('td');
+        td.appendChild(edit);
+        row.appendChild(td);
+        td = document.createElement('td');
+        td.appendChild(remove);
+        row.appendChild(td);
+        tbody.appendChild(row);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+  // 사용자 등록 시
+  document.getElementById('user-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = e.target.username.value;
+    const age = e.target.age.value;
+    const married = e.target.married.checked;
+    if (!name) {
+      return alert('이름을 입력하세요');
+    }
+    if (!age) {
+      return alert('나이를 입력하세요');
+    }
+    try {
+      await axios.post('/users', { name, age, married });
+      getUser();
+    } catch (err) {
+      console.error(err);
+    }
+    e.target.username.value = '';
+    e.target.age.value = '';
+    e.target.married.checked = false;
+  });
+  // 댓글 등록 시
+  document.getElementById('comment-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = e.target.userid.value;
+    const comment = e.target.comment.value;
+    if (!id) {
+      return alert('아이디를 입력하세요');
+    }
+    if (!comment) {
+      return alert('댓글을 입력하세요');
+    }
+    try {
+      await axios.post('/comments', { id, comment });
+      getComment(id);
+    } catch (err) {
+      console.error(err);
+    }
+    e.target.userid.value = '';
+    e.target.comment.value = '';
+  });
+```
+
+
+이제 라우터를 작성한다.
+
+routes/index.js
+```js
+const express = require('express');
+const User = require('../schemas/user');
+
+const router = express.Router();
+router.get('/', async(req, res, next) => {
+    try {
+        const users = await User.find({});
+        res.render('mongoose', {users});
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+});
+
+module.exports = router;
+```
+먼저 GET /로 접속했을 때의 라우터이다. User.find({}) 메서드로 모든 사용자를 찾은 뒤, mongoose.html 을 렌더링할 때 users 변수를 넣는다. find 메서드는 User 스키마를 require 한 뒤 사용할 수 있다. 몽고 디비의 db.users.find({}) 쿼리와 같다.
+
+몽구스도 기본적으로 프로미스를 지원하므로 async/await 과 try/catch 문을 사용해서 각각 조회 성공 시와 실패 시의 정보를 얻을 수 있다. 이렇게 미리 데이터베이스에서 데이터를 조회한 후 템플릿 렌더링에 사용할 수 있다.
+
+다음은 users.js이다.
+
+routes/users.js
+```js
+const express = require('express');
+const User = require('../schemas/user');
+const Comment = require('../schemas/comment');
+
+const router = express.Router();
+
+router.route('/')
+  .get(async (req, res, next) => {
+    try {
+      const users = await User.find({});
+      res.json(users);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  })
+  .post(async (req, res, next) => {
+    try {
+      const user = await User.create({
+        name: req.body.name,
+        age: req.body.age,
+        married: req.body.married,
+      });
+      console.log(user);
+      res.status(201).json(user);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  });
+
+router.get('/:id/comments', async (req, res, next) => {
+  try {
+    const comments = await Comment.find({ commenter: req.params.id })
+      .populate('commenter');
+    console.log(comments);
+    res.json(comments);
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+module.exports = router;
+```
+
+GET /users와 POST /users 주소로 요청이 들어올 때의 라우터이다. 요청과 사용자를 등록하는 요청을 처리한다. GET / 에서도 사용자 데이터를 조회했지만 GET /users에서는 데이터를 JSON 형식으로 반환한다는 점에서 차이가 있다.
+
+사용자를 등록할 때는 먼저 모델.create 메서드로 저장한다. 정의한 스키마에 부합하지 않는 데이터를 넣었을 때는 몽구스가 에러를 발생시킨다. _id는 자동으로 생성된다.
+
+GET /users/:id/comments 라우터는 댓글 다큐먼트를 조회하는 라우터이다. find 메서드에는 옵션이 추가되어 있다. 먼저 댓글을 쓴 사용자의 아이디로 댓글을 조회한 뒤 populate 메서드로 관련 있는 컬렉션의 다큐먼트를 불러올 수 있다. Comment 스키마 commenter 필드의 ref가 User로 되어 있으므로 알아서 users 컬렉션에서 사용자 다큐먼트를 찾아 합친다. commenter 필드가 사용자 다큐먼트로 치환된다. 이제 commenter vlfemsms ObjectId가 아니라 그 ObjectId를 가진 사용자 다큐먼트가 된다.
+
+routes/comments.js
+```js
+const express = require('express');
+const Comment = require('../schemas/comment');
+
+const router = express.Router();
+
+router.post('/', async (req, res, next) => {
+  try {
+    const comment = await Comment.create({
+      commenter: req.body.id,
+      comment: req.body.comment,
+    });
+    console.log(comment);
+    const result = await Comment.populate(comment, { path: 'commenter' });
+    res.status(201).json(result);
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
+router.route('/:id')
+  .patch(async (req, res, next) => {
+    try {
+      const result = await Comment.update({
+        _id: req.params.id,
+      }, {
+        comment: req.body.comment,
+      });
+      res.json(result);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  })
+  .delete(async (req, res, next) => {
+    try {
+      const result = await Comment.remove({ _id: req.params.id });
+      res.json(result);
+    } catch (err) {
+      console.error(err);
+      next(err);
+    }
+  });
+
+module.exports = router;
+```
+
+댓글에 관련된 CRUD 작업을 하는 라우터이다. POST /comments 라우터는 다큐먼트를 등록하는 라우터이다. Comment.create 메서드로 댓글을 저장한다. 그 후 populate 메서드로 프로미스의 결과로 반환된 comment 객체에 다른 컬렉션 다큐먼트를 불러온다. path 옵션으로 어떤 필드를 합칠지 설정하면 된다. 합쳐지 ㄴ결과를 클라이언트로 응답한다.
+
+PATCH /comments/:id 라우터는 다큐먼트를 수정하는 라우터이다. 수정에는 update 메서드를 사용한다. update 메서드의 첫 번째 인수로는 어떤 다큐먼트를 수정할지를 나타낸 쿼리 객체를 제공하고, 두 번째 인수로는 수정할 필드와 값이 들어 있는 객체를 제공한다. 시퀄라이즈와는 인수의 순서가 반대이다. 몽고디비와 다르게 $set 연산자를 사용하지 않아도 기입한 필드만 바꾼다. 따라서 실수로 다큐먼트를 통째로 수정할 일이 없어 안전하다.
+
+DELETE /comments/:id 라우터는 다큐먼트를 삭제하는 라우터이다. remove 메서드를 사용하여 삭제한다. remove 메서드에도 어떤 다큐먼트를 삭제할지에 대한 조건을 첫 번째 인수로 넣는다. 
+
+서버를 실행하기 전에 먼저 몽고디비 서버를 실행하고 웹서버를 실행한다.
+
+정상 작동 되는것을 확인하면 끝이다.
+
+만약에 터진다면 최신 몽구스에서는 useCreateIndex를 기본 채용하고 있기에 적을 필요가 없어서 터지는 것으로 삭제 해주면 된다.
+
+## 익스프레스로 SNS 서비스 만들기 
+(저자의 말)
+이제부터는 지금까지 배운 것을 바탕으로 실제 웹 서비스를 제장해보겠습니다. 앞에서 배운 내용은 다시 설명하지 않으니 실습하다가 잊어버린 내용이 있다면 언제든지 되돌아가 개념을 복습하길 바랍니다. 프로미스보다 async/await 문법을 적극적으로 사용하므로 어느정도 익숙해지고 나서 보는게 좋습니다.
+
+이 장에서는 로그인, 이미지 업로드, 게시글 작성, 해시태그 검색, 팔로잉 등의 기능이 있는 SNS 서비스인 NodeBird 앱을 만들어봅니다. 노드, 익스프레스, 그리고 npm에 있는 오픈 소스와 함께라면 복잡할 것 같은 SNS 서비스도 금방 제작할 수 있습니다.
+
+### 프로젝트 구조 갖추기
+SNS 중에는 140자의 단문 메시지를 보내고 사람들이 메시지의 내용을 공유할 수 있는 서비스가 있다. 이와 유사한 서비스를 노드로 만들어보겠다. 프론트엔드 쪽 코드가 많이 들어가지만, 노드와 익스프레스 코드 위주로 보면 된다.
+
+먼저 nodebird라는 폴더를 만든다. 항상 package.json을 제일 먼저 생성해야 한다. scripts 부분에 start 속성은 잊지말고 넣어야 한다.
+
+nodebird 폴더 안에 package.json 을 생성했다면 이제 시퀄라이즈를 설치한다. 이 프로젝트 에서는 NoSQL대신 SQL을 데이터베이스로 사용할 것이다. sns 특성상 관계가 중요하므로 관계형 데이터베이스인 MySQL을 선택하였다.
