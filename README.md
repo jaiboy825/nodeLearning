@@ -3399,3 +3399,955 @@ SNS 중에는 140자의 단문 메시지를 보내고 사람들이 메시지의 
 먼저 nodebird라는 폴더를 만든다. 항상 package.json을 제일 먼저 생성해야 한다. scripts 부분에 start 속성은 잊지말고 넣어야 한다.
 
 nodebird 폴더 안에 package.json 을 생성했다면 이제 시퀄라이즈를 설치한다. 이 프로젝트 에서는 NoSQL대신 SQL을 데이터베이스로 사용할 것이다. sns 특성상 관계가 중요하므로 관계형 데이터베이스인 MySQL을 선택하였다.
+
+먼저 프로젝트 db에 필요한 패키지들을 다운받는다.
+
+console
+```
+npm i sequelize mysql2 sequelize-cli
+npx sequelize init
+```
+
+시퀄라이즈를 init하면 models와 seeders 폴더가 생성된다. npx 명령어를 사용하는 이유는 전역 설치를 피하기 위해서 이다. 
+
+이제 다른 폴더도 생성한다. 템플릿 파일을 넣을 views 폴더, 라우터를 넣을 routes 폴더, 정적 파일을 넣을 public 폴더가 필요하다. passport 패키지를 위한 passport 폴더도 만든다. 
+
+마지막으로 익스프레스 서버 코드가 담길 app.js 와 설정값들을 담을 .env 파일을 nodebird 폴더 안에 생성한다. 폴더 구조는
+- config 
+- migrations
+- models
+- node_modules
+- passport
+- public
+- routes 
+- seeders
+- views
+- .env
+- app.js
+- package.json & lock.json
+
+이고 이와 같은 구조라면 올바르게 설정된 것이다.
+
+저자의 말, 이 구조는 고정된 구조가 아니므로 편의에 따라 바꿔도 된다. 서비스가 성장되고 규모가 커질수록 폴더 구도 복잡해지므로 각자 서비스에 맞는 구조를 적용해야 한다.
+
+그리고 npm 패키지들을 설치하고 app.js를 작성한다. 템플릿 엔진은 넌적스를 사용할 것이다.
+
+console
+```
+npm i express cookie-parser express-session morgan multer dotenv nunjucks
+npm i -D nodemon
+```
+
+app.js
+```js
+const express = require('express');
+const cookieParser = require('cookie-parser');
+const morgan = require('morgan');
+const path = require('path');
+const session = require('express-session');
+const nunjucks = require('nunjucks');
+const dotenv = require('dotenv');
+
+dotenv.config();
+const pageRouter= require('./routes/page');
+
+const app = express();
+app.set('port', process.env.PORT || 8000);
+app.set('view-engine' , 'html');
+nunjucks.configure('views', {
+    express : app,
+    watch : true
+});
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({extended: false}));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(session({
+    resave : false,
+    saveUninitialized : false,
+    secret : process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly : true,
+        secure : false
+    }
+}));
+
+app.use('/', pageRouter);
+
+app.use((req, res, next) => {
+    const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+    error.status = 404;
+    next(error);
+});
+
+app.use((err, req, res, next) => {
+    res.locals.message = err.message;
+    res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+    res.status(err.status || 500);
+    res.render('error');
+});
+
+app.listen(app.get('port'), () => {
+    console.log(app.get('port'), '번 포트에서 대기 중');
+});
+```
+
+라우터로는 현재 pageRouter만 있지만, 추후에 더 추가할 예정이다. 라우터 이후에는 404 응답 미들웨어와 에러 처리 미들웨어가 있다. 마지막으로 앱을 8000번 포트에 연결했다.
+
+.env
+```
+COOKIE_SECRET = cookiesecret
+```
+
+하드 코딩된 비밀번호가 유일하게 남아 있는 파일이 있다. 시퀄라이즈 설정을 담아둔 config.json이며, JSON 파일이라 process.env 를 사용할 수 없다. 
+
+기본적인 라우터와 템플릿 엔진도 만들어야한다. routes 폴더 안에는 page.js를 views 폴더 안에는 layout, main, profile, join, error 파일들을 생성해야 한다. 약간의 디자인을 위해 main.css를 public 폴더 안데 생성한다.
+
+routes/page.js
+```js
+const express = require('express');
+
+const router = express.Router();
+
+router.use((req, res, next) => {
+    res.locals.user = null;
+    res.locals.followerCount = 0;
+    res.locals.followingCount = 0;
+    res.locals.followerIdLIst = [];
+    next();
+});
+
+router.get('/profile', (req, res) => {
+    res.render('profile', {title : '내 정보 - NodeBird'});
+});
+
+router.get('/join', (req, res, next) => {
+    const twits = [];
+    res.render('main', {
+        title : 'NodeBird',
+        twits
+    });
+});
+
+module.exports = router;
+```
+
+GET /profile, GET /join, GET / 까지 총 세 개의 페이지로 구성되어 있다. router.use로 라우터용 미들웨어를 만들어 템플릿 엔진에서 사용할 user, followingCount, followerCount, followerIdList 변수를 res.locals 로 설정하였다. 지금은 각각 null, 0, 0, [] 이지만 나중에 값을 넣을 것이다. res.locals로 값을 설정하는 이유는 변수들을 모든 템플릿 엔진에서 공통으로 사용하기 때문이다.
+
+render 메서드 안의 twits도 지금은 빈 배열이지만 나중에 값을 넣는다.
+
+그 다음은 클라이언트이다. 저자의 깃허브에서 코드를 복사해서 넣었다.
+
+js 파일들은 길이가 너무 길어서 이 파일에는 적지 않고, 따로 작성하였다.
+
+### 데이터베이스 세팅하기
+로그인 기능이 있으므로 사용자 테이블이 필요하고, 게시글을 저장할 게시글 테이블도 필요하다. 해시태그를 사용하므로 해시태그 테이블도 만들어야 한다. 팔로잉 기능도 있는데, 이는 조금 뒤에 설명한다.
+
+models 폴더 안에 user.js와 post.js, hashtag.js를 생성한다.
+
+modles/user.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class User extends Sequelize.Model {
+  static init(sequelize) {
+    return super.init({
+      email: {
+        type: Sequelize.STRING(40),
+        allowNull: true,
+        unique: true,
+      },
+      nick: {
+        type: Sequelize.STRING(15),
+        allowNull: false,
+      },
+      password: {
+        type: Sequelize.STRING(100),
+        allowNull: true,
+      },
+      provider: {
+        type: Sequelize.STRING(10),
+        allowNull: false,
+        defaultValue: 'local',
+      },
+      snsId: {
+        type: Sequelize.STRING(30),
+        allowNull: true,
+      },
+    }, {
+      sequelize,
+      timestamps: true,
+      underscored: false,
+      modelName: 'User',
+      tableName: 'users',
+      paranoid: true,
+      charset: 'utf8',
+      collate: 'utf8_general_ci',
+    });
+  }
+
+  static associate(db) {
+    db.User.hasMany(db.Post);
+    db.User.belongsToMany(db.User, {
+      foreignKey: 'followingId',
+      as: 'Followers',
+      through: 'Follow',
+    });
+    db.User.belongsToMany(db.User, {
+      foreignKey: 'followerId',
+      as: 'Followings',
+      through: 'Follow',
+    });
+  }
+};
+```
+
+사용자 정보를 저장하는 모델이다. 이메일, 닉네임, 비밀번호를 저장하고, SNS 로그인을 했을 경우 provider와 snsId를 저장한다. provider가 local이면 로컬 로그인을 한 것이고, kakao 면 카카오 로그인을 한 것이다. 기본적으로 로컬 로그인이라 가정해서 defaultValue를 local로 주었다.
+
+테이블 옵션으로 timestamps 와 paranoid가 true로 주어졌으므로 createdAt, updatedAt, deletedAt 컬럼도 생성된다.
+
+models/post.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class Post extends Sequelize.Model {
+    static init(sequelize) {
+        return init({
+            content : {
+                type : Sequelize.STRING(140),
+                allowNull: false
+            },
+            img : {
+                type : Sequelize.STRING(200),
+                allowNull : false
+            }
+        }, {
+            sequelize,
+            timestamps : true,
+            underscored : false,
+            modelName : 'Post',
+            tableName : 'posts',
+            paranoid : false, 
+            charset : 'utf8mb4', 
+            collate : 'utf8mb4_general_ci'
+        });
+    }
+
+    static associate(db) {}
+};
+```
+
+게시글 모델은 게시글 내용과 이미지 경로를 저장한다. 게시글 등록자의 아이디를 담은 컬럼은 나중에 관계를 설정할 때 시퀄라이즈가 알아서 생성한다.
+
+models/hashtag.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class Hashtag extends Sequelize.Model {
+    static init(sequelize) {
+        return super.init({
+            title : {
+                type : Sequelize.STRING(15),
+                allowNull : false,
+                unique : true
+            }
+        }, {
+            sequelize,
+            timestamps : true,
+            underscored : false,
+            modelName : 'Hashtag',
+            tableName : 'hashtags',
+            paranoid : false,
+            charset : 'utf8mb4',
+            collate : 'utf8mb4_general_ci'
+        });
+    }
+
+    static associate(db) {}
+}
+```
+
+해시태그 모델은 태그 이름을 저장한다. 해시태그 모델을 따로 두는 것은 나중에 태그로 검색하기 위해서이다.
+
+이제 생성한 모델들을 시퀄라이즈에 등록한다. models/index.js에는 시퀄라이즈가 자동으로 생성한 코드들이 들어 있을 것이다. 그 코드들을 아래 코드로 통째로 바꾼다.
+
+models/index.js
+```js
+const Sequelize = require('sequelize');
+const env = process.env.NODE_ENV || 'development';
+const config = require('../config/config')[env];
+const User = require('./user');
+const Post = require('./post');
+const Hashtag = require('./hashtag');
+
+const db = {};
+const sequelize = new Sequelize(
+  config.database, config.username, config.password, config,
+);
+
+db.sequelize = sequelize;
+db.User = User;
+db.Post = Post;
+db.Hashtag = Hashtag;
+
+User.init(sequelize);
+Post.init(sequelize);
+Hashtag.init(sequelize);
+
+User.associate(db);
+Post.associate(db);
+Hashtag.associate(db);
+
+module.exports = db;
+```
+각각의 모델들을 시퀄라이즈 객체에 연결하였다. 이번에는 각 모델 간의 관계를 associate 함수 안에 정의한다.
+
+models/user.js
+```js
+...
+static associate(db) {
+    db.User.hasMany(db.Post);
+    db.User.belongsToMany(db.User, {
+      foreignKey: 'followingId',
+      as: 'Followers',
+      through: 'Follow',
+    });
+    db.User.belongsToMany(db.User, {
+      foreignKey: 'followerId',
+      as: 'Followings',
+      through: 'Follow',
+    });
+  }
+...
+```
+User 모델과 Post 은 1:N 관계에 있으므로 hasMany 로 연결되어 있다. user.getPosts, user.addPosts 같은 관계 메서드들이 생성된다.
+
+같은 모델끼리도 N:M 관계를 가질 수 있다. 팔로잉 기능이 대표적인 N:M 관계이다. 사용자 한 명이 팔로워 여러 명 가질 수도 있고, 한 사람이 여러 명을 팔로잉할 수도 있다. User 모델과 User 모델 간에 N:M 관계가 있는 것이다.
+
+같은 테이블 간 N:M 관계에서는 모델 이름과 컬럼 이름을 따로 정해야 한다. 모델 이름이 UserUser일 수는 없으니까, through 옵션을 사용해 생성할 모델 이름을 Follow로 정했다. 
+
+Follow 모델에서 사용자 아이디를 저장하는 컬럼 이름이 둘 다 UserId 면 누가 팔로워고 누가 팔로잉 중인지 구분되지 않으므로 따로 설정해야 한다. foreignKey 옵션에 각각 followerId, followingId를 넣어줘서 두 사용자 아이디를 구별했다.
+
+같은 테이블 간의 N:M 관계에서는 as 옵션도 넣어야 한다. 둘 다 User 모델이라 구분되지 않기 때문이다. 주의할 점은 as는 foreignKey와 반대되는 모델을 가리킨다는 것이다. foreignKey면 as는 Follower여야 한다. 팔로워를 찾음려면 먼저 팔로잉 하는 사람의 아이디를 찾아야 하는 것이라고 생각하면 된다.
+
+as에 특정한 이름을 지정했으니 user.getFollowers, user.getFollowings 같은 관계 메서드를 사용할 수 있다. include 시에도 as에 같은 값을 넣으면 관계 쿼리가 작동한다. 
+
+post 모델도 작성한다.
+
+models/post.js
+```js
+ static associate(db) {
+      db.Post.belongsTo(db.User);
+      db.Post.belongsToMany(db.Hashtag, {through : 'PostHashtag'})
+  }
+```
+
+Hashtag 모델은 Post 모델과 N:M 관계이므로 관계를 설정하였다. 이에 대한 설명은 Post와 같다. 
+
+NodeBird의 모델은 총 다섯 개, 즉 직접 생성한 User, Post, Hashtag 와 시퀄라이즈가 관계를 파악하여 생성한 PostHashtag, Follow 까지 이다.
+
+자동으로 생성된 모델도 다음과 같이 접근할 수 있다. 
+```js
+db.sequelize.models.PostHashtag
+db.sequelize.models.Follow
+```
+
+이제 생성한 모델을 데이터베이스 및 서버와 연결한다. 아직 데이터베이스를 만들지 않았으므로 데이터베이스부터 만들겠다. 데이터베이스의 이름은 nodebird이다.
+
+위에 mysql을 공부할때는 프롬프트나 워크벤치를 통해 SQL으로 데이터베이스를 만들었는데, 시퀄라이즈는 config.json을 읽어 데이터베이스를 생성해주는 기능이 있다. 따라서 config.json을 먼저 수정한다. MySQL 비밀번호를 password 에 넣고 데이터베이스 이름을 nodebird로 바꾼다. 자동 생성한 config.json에 operatorAliases속성이 들어있다면 삭제한다.
+
+콘솔에서 npx sequelize db:create 명령어를 입력하면 데이터베이스가 생성된다.
+
+데이터베이스를 생성했으니 모델을 서버와 연결한다.
+
+app.js
+```js
+const {sequelize} = require('./models');
+...
+sequelize.sync({force : false})
+.then(() => 
+    console.log('데이터베이스 연결 성공')
+)
+.catch((err) => {
+    console.log(err);
+});
+
+```
+
+서버 쪽 세팅이 완료되었다. 이제 서버를 실행한다. 시퀄라이즈는 테이블 생성 쿼리문에 IF NOT EXISTS를 넣어주므로 테이블이 없을 때 테이블을 자동으로 생성한다.
+
+### Passport 모듈로 로그인 구현하기
+SNS 서비스 이므로 로그인이 필요하다. 회원가입과 로그인을 직접 구현할 수도 있지만, 세션과 쿠키 처리 등 복잡한 작업이 많으므로 검증된 모듈을 사용하는 것이 좋다. 바로 Passport 를 사용하는 것이다. 이 모듈은 이름처럼 우리의 서비스를 사용할 수 있게 해주는 여권 같은 역할을 한다.
+
+요즘에는 서비스에 로그인할 때 아이디와 비밀번호를 사용하지 않고 구글, 페이스북, 카카오톡 같은 기존의 SNS 서비스 계정으로 로그인하기도 한다. 이 또한 Passport를 사용해서 해결할 수 있다. 이 챕터에서 카카오 로그인도 사용한다.
+
+console
+```
+npm i passport passport-local passport-kakao bcrypt
+```
+
+설치 후 모듈을 미리 app.js와 연결한다.
+app.js
+```js
+const passport = require('passport');
+...
+const passportConfig = require('./passport');
+...
+passportConfig();
+...
+app.use(passport.initialize());
+app.use(passport.session());
+
+```
+
+passport.initialize 미들웨어는 요청에 passport 설정을 심고, passport.session 미들웨어는 req.session 객체에 passport 정보를 저장한다. req.session 객체는 express-session 에서 생성하는 것이므로 passport 미들웨어는 express-session 미들웨어보다 뒤에 연결해야 한다.
+
+passport/index.js
+```js
+const passport = require('passport');
+const local = require('./localStrategy');
+const kakao = require('./kakaoStrategy');
+const User = require('../models/user');
+
+module.exports = () => {
+    passport.serializeUser((user, done) => {
+        done(null, user.id);
+    });
+
+    passport.deserializeUser((id, done) => {
+        User.findOne({where: {id}})
+        .then(user => done(null, user))
+        .catch(err => done(err));
+    });
+
+    local();
+    kakao();
+}
+```
+
+모듈 내부를 보면 passport.serializeUser와 passport.deserializeUser가 있다. 이 부분이 Passport 를 이해하는 핵심이다.
+
+serializeUser는 로그인 시 실행되며, req.session(세션) 객체에 어떤 데이터를 저장할지 정하는 메서드이다. 매개변수로 user를 받고 나서, done 함수에 두 번째 인수로 user.id를 넘기고 있다. 매개변수 user가 어디서 오는지는 나중에 설명하고, 지금은 일단 사용자 정보가 들어있다고 생각하면 된다.
+
+done 함수의 첫 번째 인수는 에러 발생 시 사용하는 것이고, 두 번째 인수는 저장하고 싶은 데이터를 넣는다. 로그인 시 사용자 데이터를 세션에 저장하는데, 세션에 사용자 정보를 모두 저장하면 세션의 용량이 커지고 데이터 일관성에 문제가 발생하므로 사용자의 아이디만 저장하라고 명령한 것이다.
+
+serializeUser가 로그인 시에만 실행된다면 deserializeUser는 매 요청 시 실행된다. passport.session 미들웨어가 이 메서드를 호출하고, serializeUser의 done의 두 번째 인수로 넣었던 데이터가 deserializeUser의 매개변수가 된다. 여기서는 사용자의 아이디이다. 조금 전에 serializeUser에서 세션에 저장했던 아이디를 받아 데이터베이스에서 사용자 정보를 조회한다. 조회한 정보를 req.user에 저장하므로 앞으로 req.user를 통해 로그인한 사용자의 정보를 가져올 수 있다.
+
+즉, serializeUser는 사용자 정보 객체를 세션에 아이디로 저장하는 것이고, deserializeUser는 세션에 저장한 아이디를 통해 사용자 정보 객체를 불러오는 것이다. 세션에 불필요한 데이터를 담아두지 않기 위한 과정이다.
+
+전체 과정은 
+1. 라우터를 통해 로그인 요청이 들어옴
+2. 라우터에서 passport.authenticate 메서드 호출
+3. 로그인 전략 수행
+4. 로그인 성공 시 사용자 정보 객체와 함께 req.login 호출
+5. req.login 메서드가 passport.serializeUser 호출
+6. req.session에 사용자 아이디만 저장
+7. 로그인 완료
+
+로그인 이후 과정은
+1. 요청이 들어옴
+2. 라우터에 요청이 도달하기 전에 passport.session 미들웨어가 passport.deserializeUser 메서드 호출
+3. req.session에 저장된 아이디로 데이터베이스에서 사용자 조회
+4. 조회된 사용자 정보를 req.user에 저장
+5. 라우터에서 req.user 객체 사용 사능
+
+passport/index.js 의 localStrategy 와 kakaoStrategy 파일은 각각 로컬 로그인과 카카오 로그인 전략에 대한 파일이다. Passport는 로그인 시의 동작을 전략이라는 용어로 표현하고 있다. 다소 거창하긴 하지만, 로그인 과정을 어떻게 처리할 지 설명하는 파일이라고만 생각하면 된다.
+
+#### 로컬 로그인 구현하기
+
+로컬 로그인이란 다른 SNS 서비스를 통해 로그인하지 않고 자체적으로 회원가입 후 로그인하는 것을 의미한다. 즉, 아이디/비밀번호 또는 이메일/비밀번호를 통해 로그인하는 것이다.
+
+Passport에서 이를 구현하려면 passport-local 모듈이 필요한데, 위에서 이미 설치 했기에 전략만 세우면 된다. 로그인에만 해당하는 전략이므로 회원가입은 따로 만들어야 한다. 
+
+회원가입, 로그인, 로그아웃 라우터를 먼저 만든다. 이러한 라우터는 접근 조건이 있다. 로그인한 사용자는 회원가입과 로그인 라우터에 접근하면 안된다. 로그인하지 않은 사용자는 로그아웃 라우터에 접근하면 안된다. 따라서 라우터에 접근 권한을 제어하는 미들웨어가 필요하다. 미들웨어를 만들어보면서 Passport가 req 객체에 추가해주는 req.isAuthenticated 메서드를 사용해보겠다.
+
+routes/middlewares.js
+```js
+exports.isLoggedIn = (req, res, next) => {
+    if (req.isAuthenticated()) {
+        next();
+    }else {
+        res.status(403).send('로그인 필요');
+    }
+}
+
+exports.isNotLoggedIn = (req, res, next) => {
+    if(!req.isAuthenticated()) {
+        next();
+    }else {
+        const message = encodeURIComponent('로그인한 상태입니다.');
+        res.redirect(`/?error=${message}`)
+    }
+}
+```
+Passport 는 req 객체에 isAuthenticated 메서드를 추가한다. 로그인 중이면 req.isAuthenticated() 가 true고, 그렇지 않으면 false이다. 따라서 로그인 여부를 이 메서드로 파악할 수 있다. 라우터들 중 로그아웃 라우터나 이미지 업로드 라우터 등은 로그인한 사람만 접근할 수 있게 해야 하고, 회원가입 라우터나 로그인 라우터는 로그인하지 않는 사람만 접근할 수 있게 해야 한다. 이럴 때 라우터에 로그인 여부를 검사하는 미들웨어를 넣어 걸러낼 수 있다. 
+
+isLoggedInrhk isNotLoggedIn 미들웨어를 만들었다.
+
+routes/page.js
+```js
+const {isLoggedIn, isNotLoggedIn} = require('./middleware');
+...
+router.get('/profile', isLoggedIn, (req, res) => {
+    res.render('profile', {title : '내 정보 - NodeBird'});
+});
+
+router.get('/join', isNotLoggedIn, (req, res) => {
+    res.render('join', {title : '회원가입 - NodeBird'});
+})
+```
+자신의 프로필은 로그인을 해야 볼 수 있으므로 isLoggedIn 미들웨어를 사용한다. req.isAuthenticated()가 true여야 next가 호출되어 res.render가 있는 미들웨어로 넘어갈 수있다. false라면 로그인 창이 있는 메인 페이지로 리다이렉트 된다.
+
+회원가입 페이지는 로그인을 하지 않는 사람에게만 보여야 한다. 따라서 isNotLoggedIn 미들웨어로 req.isAuthenticated()가 false일 때만 nextfmf 호출하도록 하였다.
+
+로그인 여부로만 미드루에어를 만들 수 있는 것이 아니라 팔로잉 여부, 관리자 여부 등의 미들웨어를 만들 수도 있으므로 다양하게 활용할 수 있다. res.locals.user 속성에 req.user를 넣은 것을 주목해보면, 넌적스에서 user객체를 통해 사용자 정보에 접근할 수 있게 되었다.
+
+이제 회원가입, 로그인, 로그아웃 라우터를 작성한다.
+routes/auth.js
+```js
+const express = require('express');
+const passport = require('passport');
+const bcrypt = require('bcrypt');
+const { isLoggedIn, isNotLoggedIn } = require('./middlewares');
+const User = require('../models/user');
+
+const router = express.Router();
+// ----------------1
+router.post('/join', isNotLoggedIn, async (req, res, next) => {
+  const { email, nick, password } = req.body;
+  try {
+    const exUser = await User.findOne({ where: { email } });
+    if (exUser) {
+      return res.redirect('/join?error=exist');
+    }
+    const hash = await bcrypt.hash(password, 12);
+    await User.create({
+      email,
+      nick,
+      password: hash,
+    });
+    return res.redirect('/');
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+// ----------------1
+// ----------------2
+router.post('/login', isNotLoggedIn, (req, res, next) => {
+  passport.authenticate('local', (authError, user, info) => {
+    if (authError) {
+      console.error(authError);
+      return next(authError);
+    }
+    if (!user) {
+      return res.redirect(`/?loginError=${info.message}`);
+    }
+    return req.login(user, (loginError) => {
+      if (loginError) {
+        console.error(loginError);
+        return next(loginError);
+      }
+      return res.redirect('/');
+    });
+  })(req, res, next); // 미들웨어 내의 미들웨어에는 (req, res, next)를 붙입니다.
+});
+// ----------------2
+// ----------------3
+router.get('/logout', isLoggedIn, (req, res) => {
+  req.logout();
+  req.session.destroy();
+  res.redirect('/');
+});
+// ----------------3
+router.get('/kakao', passport.authenticate('kakao'));
+
+router.get('/kakao/callback', passport.authenticate('kakao', {
+  failureRedirect: '/',
+}), (req, res) => {
+  res.redirect('/');
+});
+
+module.exports = router;
+```
+
+나중에 app.js와 연결할 때 /auth 접두사를 붙일 것이므로 라우터의 주소는 각각 /auth/join, /auth/login, /auth/logout이 된다.
+
+1. 회원가입 라우터이다. 기존에 같은 이메일로 가입한 사용자가 있는지 조회한 뒤, 있다면 회원가입 페이지로 되돌려보낸다. 단, 주소 뒤에 에러를 쿼리스트링으로 표시한다. 같은 이메일로 가입한 사용자가 없다면 비밀번호를 암호화하고, 사용자 정보를 생성한다. 회원가입 시 비밀번호는 암호화해서 저장해야 한다. 이번에는 bcrypt 모듈을 사용했다. bcrypt 모듈의 hash 메서드를 사용하면 쉽게 비밀번호를 암호화 할 수 있다. bcrypt의 두 번째 인수는 pbkdf2의 반복 횟수와 비슷한 기능을 한다. 숫자가 커질수록 비밀번호를 알아내기 어려워지지만 암호화 시간도 오래 걸린다. 
+2. 로그인 라우터이다. 로그인 요청이 들어오면 passport.authenticate('local') 미들웨어가 로컬 로그인 전략을 수행한다. 미들웨어인데 라우터 미들웨어 안에 들어 있다. 미들웨어에 사용자 정의 기능을 추가하고 싶을때 이렇게 할 수 있다. 이럴 떄는 내부 미들웨어에 (req, res, next)를 인수로 제공해서 호출하면 된다. 전략 코드는 잠시 후에 작성한다. 전략이 성공하거나 실패하면 authenticate 메서드의 콜백함수가 실행된다. 콜백 함수의 첫 번째 매개변수 값이 있다면 실패한 것이다. 두 번째 매개변수 값이 있다면 성공한 것이고, req.login 메서드를 호출한다. Passport 는 req 객체에 login과 logout 메서드를 추가한다. req.login은 passport.serializeUser를 호출한다. req.login에 제공하는 user 객체가 serializeUser로 넘어가게 된다.
+3. 로그아웃 라우터이다. req.logout 메서드는 req.user 객체를 제거하고, req.session.destroy는 req.session 객체의 내용을 제거한다 세션 정보를 지운 후 메인 페이지로 되돌아 간다. 로그인이 해제되어 있을 것이다.
+
+passport/localStrategy.js
+```js
+const passport = require('passport');
+const LocalStrategy = require('passports-local').Strategy;
+const bcrypt = require('bcrypt');
+
+const User = require('../models/user');
+
+module.exports = () => {
+    passport.use(new LocalStrategy ({
+        usernameField : 'email',
+        passwordField : 'password'
+    }, async (email, password, done) => {
+        try {
+            const exUser = await User.findOne({ where : {email}});
+            if (exUser) {
+                const result = await bcrypt.compare(password, exUser.password);
+                if(result) {
+                    done(null, exUser);
+                }else {
+                    done(null, false, {message : '비밀번호가 일치하지 않는다.'});
+                }
+            } else {
+                done(null, false, {message: '가입되지 않은 회원입니다.'});
+            }
+        } catch (error) {
+            console.error(error);
+            done(error);
+        }
+    }));
+}
+```
+로그인 전략을 구현했다. passport-local 모듈에서 Strategy 생성자를 불러와 그 안에 전략을 구현하면 된다.
+
+1. LocalStrategy 생성자의 첫 번째 인수로 주어진 객체는 전략에 관한 설정을 하는 곳이다. usernameField와 passwordField 에는 일치하는 로그인 라우터의 req.body 속성명을 적으면 된다. req.body.email 에 이메일 주소가, req.body.password에 비밀번호가 담겨 들어오므로 email과 password를 각각 넣는다.
+2. 실제 전략을 수행하는 async 함수이다. LocalStrategy 생성자의 두 번째 인수로 들어간다. 첫 번째 인수에서 넣어준 email과 password는 각각 async 함수의 첫 번째와 두 번째 매개변수가 된다. 세 번째 매개변수인 done 함수는 passport.authenticate 의 콜백 함수이다.
+
+전략의 내용은 다음과 같다. 먼저 사용자 데이터베이스에서 일치하는 이메일이 있는지 찾은 후, 있다면 bcrypt 의 compare 함수로 비밀번호를 비교한다. 비밀번호까지 일치한다면 done 함수의 두 번쨰 인수로 사용자 정보를 넣어 보낸다. 두 번째 인수를 사용하지 않는 경우는 로그인에 실패했을 때뿐이다. done 함수의 첫 번째 인수를 사용하는 경우는 서버 쪽에서 에러가 발생했을 때고, 세 번째 인수를 사용하는 경우는 로그인 처리 과정에서 비밀번호가 일치하지 않거나 존재하지 않는 회원일 때와 같은 사용자 정의 에러가 발생했을 때이다.
+
+done이 호출된 후에는 다시 passport.authenticate 의 콜백 함수에서 나머지 로직이 실행된다. 로그인에 성공했다면 메인페이지로 리다이렉트되면서 로그인 폼 대신 회원 정보가 뜰 것이다. 아직 auth 라우터를 연결하지 않았으므로 코드는 동작하지 않는다.
+
+#### 카카오 로그인 구현하기
+카카오 로그인이란 로그인 인증 과정을 카카오에 맡기는 것을 뜻한다. 사용자는 번거롭게 새로운 사이트에 회원가입하지 않아도 되므로 좋고, 서비스 제공자는 로그인 과정을 검증된 SNS에 안심하고 맡길 수 있어 좋다.
+
+SNS 로그인의 특징은 회원가입 절차가 따로 없다는 것이다. 처음 로그인할 때는 회원가입 처리를 해야 하고, 두 번째 로그인부터는 로그인 처리를 해야 한다. 따라서 SNS 로그인 전략은 로컬 로그인 전략보다 다소 복잡하다.
+
+passport/kakaoStrategy.js
+```js
+const passport = require('passport');
+const KakaoStrategy = require('passport-kakao').Strategy;
+
+const User = require('../models/user');
+//----------------1
+module.exports = () => {
+    passport.use(new KakaoStrategy({
+        clientId : process.env.KAKAO_ID,
+        callbackUrl : '/auth/kakao/callback'
+        //----------------1
+        //----------------2
+    }, async (accessToken, refreshToken, profile, done) => {
+        console.log('kakao profile', profile);
+        try {
+            const exUser = await User.findOne({
+                where : {snsId:profile.id, provider:'kakao'}
+            });
+            if(exUser) {
+                done(null, exUser);
+                //----------------2
+                //----------------3
+            }else {
+                const newUser = await User.create({
+                    email : profile._json && profile._json.kakao_account_email,
+                    nick : profile.displayName,
+                    snsId : profile.id,
+                    provider : 'kakao'
+                });
+                done(null, newUser);
+            }
+        } catch (error) {
+            console.error(error);
+            done(error);
+        }
+    }));
+    //----------------3
+}
+```
+
+passport-kakao 모듈로부터 Strategy 생성자를 불러와 전략을 구현한다.
+
+1. 로컬 로그인과 마찬가지로 카카오 로그인에 대한 설정을 한다. clientID 는 카카오에서 발급해주는 아이디이다. 노출되지 않아야 하므로 process.env.KAKAO_ID 로 설정했다. 나중에 아이디를 발급받아 .env 파일에 넣을 것이다. callbackURL 은 카카오로부터 인증 결과를 받을 라우터 주소이다. 아래에서 라우터를 작성할 때 이 주소를 사용한다.
+2. 먼저 기존에 카카오를 통해 회원가입한 사용자가 있는지 조회한다. 있다면 이미 회원가입되어 있는 경우이므로 사용자 정보와 함께 done 함수를 호출하고 전략을 종료한다.
+3. 카카오를 통해 회원가입한 사용자가 없다면 회원가입을 진행한다. 카카오에서는 인증 후 callbackURL 에 적힌 주소로 accessToken, refreshToken과 profile을 보낸다. profile에는 사용자 정보들이 들어 있다. 카카오에서 보내주는 것이므로 데이터는 console.log 메서드로 확인해보는 것이 좋다. profile 객체에서 원하는 정보를 꺼내와 회원가입을 하면 된다. 사용자를 생성한 뒤 done 함수를 호출한다.
+
+이제 카카오 로그인 라우터를 만든다. 로그아웃 라우터 아래에 추가하면 된다. 회원가입을 따로 코딩할 필요가 없고, 카카오 로그인 전략이 대부분의 로직을 처리하므로 라우터가 상대적으로 간단하다.
+
+routes/auth.js
+```js
+...
+router.get('/kakao', passport.authenticate('kakao'));
+
+router.get('/kakao/callback', passport.authenticate('kakao', {
+  failureRedirect: '/',
+}), (req, res) => {
+  res.redirect('/');
+});
+...
+```
+
+GET /auth/kakao로 접근하면 카카오 로그인 과정이 시작된다. layout의 카카오톡 버튼에 링크가 붙어 있다. GET /auth/kakao에서 로그인 전략을 수행하는데, 처음에는 카카오 로그인 창으로 리다이렉트한다. 그 창에서 로그인 후 성공 여부 결과를 GET /auth/kakao/callback으로 받는다. 이 라우터에서는 카카오 로그인 전략을 다시 수행한다.
+
+로컬 로그인과 다른 점은 passport.authenticate 메서드에 콜백 함수를 제공하지 않는다는 점이다. 카카오 로그인은 로그인 성공 시 내부적으로 req.login을 호출하므로 직접 호출할 필요가 없다. 콜백 함수 대신 로그인에 실패했을 때 어디로 이동할지를 failureRedirect 속성에 적고, 성공 시에도 어디로 이동할지를 다음 미들웨어에 적는다.
+
+추가한 auth 라우터를 app.js에 연결한다.
+
+app.js
+```js
+const authRouter = require('./routes/auth');
+...
+app.use('/auth', authRouter);
+...
+```
+
+이렇게 하면 끝난것 같지만 아니다. kakaoStrategy.js에서 사용하는 clientID를 발급받아야 한다. 카카오 로그인을 위해서는 카카오 개발자 등록후 키를 받아야 한다.
+
+애플리케이션 추가 후 발급받은 REST API 키를 복사해서 .env 파일에 추가한다.
+
+.env
+```
+KAKAO_ID=발급 받은 키
+```
+
+사이트 도메인에는 http://localhost:8000을 입력한다. 만약 다른 포트를 사용하고 있다면 해당 포트를 적어야 한다.
+
+활성화 상태를 on으로 바꾸고 리다이렉트 URI를 http://localhost:8000/auth/kakao/callback로 설정해준다.
+
+제품 설정 > 카카오 로그인 > 동의항목 메뉴로 가서 원하는 정보가 있다면 설정 버튼을 누르고 저장
+
+이제 실행을 하면 카카오 로그인이 된다.
+
+### multer 패키지로 이미지 업로드 구현하기
+SNS 서비스인 만큼 이미지 업로드도 중요하다. multer 모듈을 사용해 멀티파트 형식의 이미지를 업로드한다.
+
+패키지를 먼저 설치한다. npm i multer
+
+이미지를 어떻게 저장할 것인지는 서비스의 특성에 따라 달라진다. NodeBird 서비스는 input 태그를 통해 이미지를 선택할 때 바로 업로드를 진행하고, 업로드된 사진 주소를 다시 클라이언트에 알릴 것이다. 게시글을 저장할 때는 데이터베이스에 직접 이미지 데이터를 넣는 대신 이미지 경로만 저장한다. 이미지는 서버 디스크에 저장된다.
+
+routes/post.js
+```js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const { Post, Hashtag } = require('../models');
+const { isLoggedIn } = require('./middlewares');
+
+const router = express.Router();
+
+try {
+  fs.readdirSync('uploads');
+} catch (error) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      cb(null, 'uploads/');
+    },
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname);
+      cb(null, path.basename(file.originalname, ext) + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+router.post('/img', isLoggedIn, upload.single('img'), (req, res) => {
+  console.log(req.file);
+  res.json({ url: `/img/${req.file.filename}` });
+});
+
+const upload2 = multer();
+router.post('/', isLoggedIn, upload2.none(), async (req, res, next) => {
+  try {
+    const post = await Post.create({
+      content: req.body.content,
+      img: req.body.url,
+      UserId: req.user.id,
+    });
+    const hashtags = req.body.content.match(/#[^\s#]*/g);
+    if (hashtags) {
+      const result = await Promise.all(
+        hashtags.map(tag => {
+          return Hashtag.findOrCreate({
+            where: { title: tag.slice(1).toLowerCase() },
+          })
+        }),
+      );
+      await post.addHashtags(result.map(r => r[0]));
+    }
+    res.redirect('/');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+module.exports = router;
+```
+
+POST /post/img 라우터와 POST /post 라우터를 만든다. app.use('/post')를 할 것이므로 앞에 /post 경로가 붙었다.
+
+POST /post/img 라우터에서는 이미지 하나를 업로드 받은 뒤 이미지의 저장 경로를 클라이언트로 응답한다. static 미들웨어가 /img 경로의 정적 파일을 제공하므로 클라이언트에서 업로드 한 이미지에 접근할 수 있다.
+
+POST /post 라우터는 게시글 업로드를 처리하는 라우터이다. 이전 라우터에서 이미지를 업로드 했다면 이미지 주소도 req.body.url로 전송된다. 비록 데이터 형식이 multipart이지만, 이미지 데이터가 들어 있지 않으므로 none 메서드를 사용했다. 이미지 주소가 온 것일 뿐, 이미지 데이터 자체가 오지는 않았다. 이미지는 이미 POST/img 라우터에서 저장되었다.
+
+게시글을 데이터베이스에 저장한 후, 게시글 내용에서 해시태그를 정규표현식으로 추출해낸다. 추출한 해시태그는 데이터베이스에 저장하는데, 먼저 slice(1).toLowerCase()를 사용해 해시태그에서 #을 떼고 소문자로 바꾼다. 저장할 때는 findOrCreate 메서드를 사용했다. 이 시퀄라이즈 메서드는 데이터베이스에 해시태그가 존재하면 가져오고, 존재하지 않으면 생성한 후 가져온다. 결괏값으로 [모델, 생성 여부]를 반환하므로 result.map(r => r[0])으로 모델만 추출했다. 마지막으로 해시태그 모델들을 post.addHashtags 메서드로 게시글과 연결한다.
+
+게시글 작성 기능이 추가되었으므로 이제부터 메인 페이지 로딩 시 메인 페이지와 게시글을 함께 로딩하도록 하겠다.
+
+routes/page.js
+```js
+...
+router.get('/', async (req, res, next) => {
+  try {
+    const posts = await Post.findAll({
+      include: {
+        model: User,
+        attributes : ['id', 'nick']
+      },
+      order : [['createdAt', 'DESC']]
+    });
+    res.render('main', {
+      title: 'NodeBird',
+      twits: posts
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+  
+});
+...
+```
+
+main 부분을 위의 코드로 바꾼다.
+
+먼저 데이터베이스에서 게시글을 조회한 뒤 결과를 twits에 넣어 렌더링한다. 조회할 때 게시글 작성자의 아이디와 닉네임을 JOIN해서 제공하고, 게시글의 순서는 최신순으로 정렬했다. 지금까지 이미지 업로드 기능을 만들었다. 남은 기능들을 마저 추가하고 서버를 실행해본다.
+
+### 프로젝트 마무리하기
+이미지 업로드까지 마무리되었으니 이제 팔로잉 기능과 해시태그 검색 기능만 추가하면된다.
+
+다른 사용자를 팔로우하는 기능은 routes/user.js를 작성한다.
+
+```js
+const express = require('express');
+
+const { isLoggedIn} = require('./middlewares');
+const User = require('../models/user');
+
+const router = express.Router();
+
+router.post('/:id/follow', isLoggedIn, async (req, res, next) => {
+    try {
+        const user = await User.findOne({ where : {id : req.user.id}});
+        if (user) {
+            await user.addFollowing(parseInt(req.params.id, 10));
+            res.send('success');
+        }else {
+            res.status(404).send('No user');
+        }
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+});
+
+module.exports = router;
+```
+
+POST /user/:id/follow 라우터이다. :id 부분이 req.params.id가 된다. 먼저 팔로우할 사용자를 데이터베이스에서 조회한 후, 시퀄라이즈에서 추가한 addFollowing 메서드로 현재 로그인한 사용자의 관계를 지정한다.
+
+팔로잉 관계가 생겼으므로 req.user에도 팔로워와 팔로잉 목록을 저장한다. 앞으로 사용자 정보를 불러올 때는 팔로워와 팔로잉 목록도 같이 불러오게 된다. req.user 를 바꾸려면 deserializeUser 를 조작해야 한다.
+
+passport/index.js
+```js
+passport.deserializeUser((id, done) => {
+    User.findOne({
+         where: { id },
+         include : [{
+             model : User,
+             attributes : ['id', 'nick'],
+             as : 'Followers'
+         }, {
+             model : User,
+             attributes : ['id', 'nick'],
+             as : 'Followings'
+         }]
+        })
+      .then(user => done(null, user))
+      .catch(err => done(err));
+  });
+```
+
+세션에 저장된 아이디로 사용자 정보를 조회할 때 팔로잉 목록과 팔로워 목록도 같이 조회한다. include에서 계속 attributes 를 지정하고 있는데, 이는 실수로 비밀번호를 조회하는 것을 방지하기 위해서이다.
+
+팔로잉/팔로워 숫자와 팔로우 버튼을 표기하기 위해 routes/page.js를 수정한다.
+
+routes/page.js
+```js
+router.use((req, res, next) => {
+  res.locals.user = req.user;
+  res.locals.followerCount = req.user ? req.user.Followers.length : 0;
+  res.locals.followingCount = req.user ? req.user.Followings.length : 0;
+  res.locals.followerIdList = req.user ? req.user.Followings.map(f => f.id) : [];
+  next();
+});
+```
+
+로그인한 경우에는 req.user가 존재하므로 팔로잉/팔로워 수와 팔로워 아이디 리스트를 넣는다. 팔로워 아이디 리스트를 넣는 이유는 팔로워 아이디 리스트에 게시글 작성자의 아이디가 존재하지 않으면 팔로우 버튼을 보여주기 위해서이다.
+
+routes/page.js
+```js
+const { Post, User, Hashtag } = require('../models');
+
+...
+router.get('/hashtag', async (req, res, next) => {
+  const query = req.query.hashtag;
+  if (!query) {
+    return res.redirect('/');
+  }
+  try {
+    const hashtag = await Hashtag.findOne({ where: { title: query } });
+    let posts = [];
+    if (hashtag) {
+      posts = await hashtag.getPosts({ include: [{ model: User }] });
+    }
+
+    return res.render('main', {
+      title: `${query} | NodeBird`,
+      twits: posts,
+    });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+```
+
+해시태그로 조회하는 GET /hashtag 라우터이다. 쿼리스트링으로 해시태그 이름을 받고 해시태그 값이 없는 경우 메인페이지로 돌려보낸다. 데이터베이스에서 해당 해시태그를 검색한 후, 해시태그가 있다면 시퀄라이즈에서 제공하는 getPosts 메서드로 모든 게시글을 가져온다. 가져올 때는 작성자 정보를 합친다. 조회 후 메인 페이지를 렌더링하면서 전체 게시글 대신 조회된 게시글만 twits에 넣어 렌더링한다.
+
+마지막으로 routes/post.js 와 routes/user.js 를 app.js에 연결한다. 업로드한 이미지를 제공할 라우터도 express.static 미들웨어로 uploads 폴더와 연결한다. express.static 을 여러 번 쓸 수 있다는 사실을 기억해야 한다. 이제 uploads 폴더 내 사진들이 /img 주소로 제공된다.
+
+app.js
+```js
+const postRouter = require('./routes/post');
+const userRouter = require('./routes/user');
+...
+app.use('/post', postRouter);
+app.use('/user', userRouter);
+```
+
+서버를 실행하고 정상 작동 되는지 확인하면 된다.
+
+추가로 할만한 작업
+- 팔로잉 끊기 (시퀄라이즈의 destroy 메서드와 라우터 활용)
+- 프로필 정보 변경하기 (시퀄라이즈의 update 메서드와 라우터 활용)
+- 게시글 좋아요 누르기 및 좋아요 취소하기 (사용자-게시글 모델 간 N:M 관계 정립 후 라우터 활용)
+- 게시글 삭제하기 (등록자와 현재 로그인한 사용자가 같을 때, 시퀄라이즈의 destroy 메서드와 라우터 활용)
+- 매번 데이터베이스를 조회하지 않도록 deserializeUser 캐싱하기 (객체 선언 후 객체에 사용자 정보 저장, 객체 안에 캐싱된 값이 있으면 조회)
