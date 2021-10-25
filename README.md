@@ -2194,7 +2194,7 @@ require('./models')는 index.js를 생략한 것, db.sequelize 를 불러와서 
 
 MySQL과 연동할 때는 config 폴더 안의 config.json 정보가 사용한다. 다음과 같이 수정한다. 자동 생성한 config.json에 operator Aliases 속성이 들어 있다면 삭제한다.
 
-development.password와 development.database를 현재 MySQL 커넥션과 일치하게 수정하면 된다. test와 production 쪽은 각각 테스트 용도와 배포 용도로 접속하기 ㅜ이해 사용되는 것이므로 여기서는 설정하지 않는다. 
+development.password와 development.database를 현재 MySQL 커넥션과 일치하게 수정하면 된다. test와 production 쪽은 각각 테스트 용도와 배포 용도로 접속하기 위해 사용되는 것이므로 여기서는 설정하지 않는다. 
 
 password 속성에는 mysql 비밀번호를 입력하고, database 속성에는 nodejs를 입력한다.
 
@@ -5282,3 +5282,268 @@ cors 미들웨어에 옵션 인수를 주었는데, origin 속성에 허용할 �
 또 하나 특이한 점이 있다. cors 미들웨어에 인수를 직접 줘서 호출했는데 이는 미드루에어의 작동 방식을 커스터마이징하고싶을 때 사용하는 방법이라고 설명했다.
 
 ##### API 만들기 끝
+
+<hr>
+
+## 노드 서비스 테스트하기
+(저자의 말) 이번 장에서는 NodeBird 서비스에 테스팅을 적용해보겠습니다. 실제 서비스를 개발 완료한 후, 개발자나 QA들은 자신이 만든 서비스가 제대로 동작하는지 테스트해본다. 이때 기능이 많다면 일일이 수작업으로 테스트하기에는 작업량이 너무 많을 수 있다. 이런 경우 테스트를 자동화하여 프로그램이 프로그램을 테스트하도록 만들기도 한다.
+
+또한, 테스트 환경과 실제 서비스 환경은 다르므로 테스트하는 데 제약이 따를 수도 있고, 테승트 결과와 실제 동작 결과가 다를 수도 있다. 이럴 때는 테스트 환경에서 실제 환경을 최대한 흉내 내서 작업한다.
+
+단, 테스트를 아무리 철저하게 해도 에러를 완전히 막을 수는 없다. 보통 에러는 개발자가 예상하지 못한 케이스에서 발생하므로, 예상하지 못한다면 그에 대한 테스트로 작성할 수 없다. 하지만 모든 에러를 없앨 수 없더라도 테스트는 작성하는 게 좋다. 간단한 에러로 인해 프로그램이 고장나는 것은 막을 수 있기 떄문이다.
+
+### 테스트 준비하기
+테스트에 사용할 패키지는 jest 이다. 이 패키지는 페이스북에서 만든 오픈소스로, 테스팅에 필요한 툴들을 대부분 갖추고 있어 편리하다.
+
+위에서 만든 nodebird 프로젝트를 그대로 사용하고, 여기에 jest 패키지를 설치한다. 테스팅 툴은 개발 시에만 사용하므로 -D 옵션을 사용한다.
+
+console
+```
+npm i -D jest
+```
+
+package.json에는 test라는 명령어를 등록해둔다. 명령어를 실행할 때 jest가 실행된다.
+
+package.json
+```json
+  "scripts": {
+    "start": "nodemon app",
+    "test" : "jest"
+  },
+```
+
+routes 폴더 안에 middlewares.test.js를 만든다. 테스트용 파일은 파일명과 확장자 사이에 test나 spec을 넣으면 된다.
+
+npm test로 테스트 코드를 실행할 수 있다. 파일명에 test나 spec이 들어간 파일들을 모두 찾아 실행한다.
+
+console
+```
+npm test
+```
+
+실행을 하게되면 테스트를 아무것도 작성하지 않았으므로 에러가 발생한다. 이를 테스트가 실패했다고 표현한다. 첫번째 테스트 코드를 작성한다.
+
+routes/middlewares.test.js
+```js
+test('1+1은 2입니다.', ()=> {
+    expect(1+1).toEqual(2);
+})
+```
+
+test 함수의 첫 번째 인수로는 테스트에 대한 설명을 적고, 두 번째 인수인 함수에는 테스트 내용을 적는다. expect 함수의 인수로 실제 코드를, toEqual 함수의 인수로 예상되는 결괏값을 넣으면 된다.
+
+실행을 해보면 expect에 넣은 값과 toEqual에 넣은 값이 일치하면 테스트를 통과한다. 두 값을 다르게 해서도 테스트해보면 결괏값이 바뀐다.
+
+테스트가 실패하면 정확히 어떤 부분에서 실패했는지 시각적으로 보여준다. 따라서 코드에 대해 테스트를 작성해두면 어떤 부분에 문제가 있는지 명확하게 파악할 수 있다.
+
+### 유닛 테스트
+이제 실제 NodeBird의 코드를 테스트 해본다. middlewares.js에 있는 isLoggedIn과 isNotLoggedIn 함수를 테스트 해보겠다
+
+middlewares.test.js
+```js
+const {isLoggedIn, isNotLoggedIn} = require('./middlewares');
+
+describe('isLoggedIn', () => {
+    test('로그인되어 있으면 isLoggedIn이 next를 호출해야 함', () => {
+
+    });
+    test('로그인되어 있지 않으면 isLoggedIn이 에러를 응답해야 함', () => {
+
+    });
+})
+
+describe('isNotLoggedIn', () => {
+    test('로그인되어 있으면 isNotLoggedIn이 에러를 응답해야 함', () => {
+
+    });
+    test('로그인되어 있지 않으면 isNotLoggedIn이 next를 호출해야 함', () => {
+
+    });
+})
+```
+
+isLoggedIn 함수와 Not 함수를 불러와 네 개의 테스트를 작성했다. 아직 내용은 입력하지 ㅇ낳았다. describe 함수는 처음 보는 것일텐데, 이 함수는 테스트를 그룹화해주는 역할을 한다. test 함수와 마찬가지로 첫 번째 인수는 그룹에 대한 설명, 두 번째 인수인 함수는 그룹에 대한 내용이다.
+
+middlewares.js를 보고 오면 실제 코드에서는 익스프레스가 req, res 객체와 next 함수를 인수로 넣었기에 사용할 수 있었지만, 테스트 환경에서는 어떻게 넣어야 할지 고민된다. req 객체에는 isAuthenticated 메서드가 존재하고 res 객체에도 status, send, redirect 메서드가 존재하는데, 코드가 성공적으로 실행되게 하려면 이것들을 모두 구현해야 한다.
+
+이럴 때는 과감하게 가짜 객체와 함수를 만들어 넣으면 된다. 테스트의 역할은 코드나 함수가 제대로 실행되는지를 검사하고 값이 일치하는지를 검사하는 것이므로, 테스트 코드의 객체가 실제 익스프레스 객체가 아니어도 된다. 이렇게 가짜 객체, 가짜 함수를 넣는 행위를 모킹이라고 한다.
+
+middleware.test.js
+```js
+const { isLoggedIn, isNotLoggedIn } = require('./middlewares');
+
+describe('isLoggedIn', () => {
+  const res = {
+    status: jest.fn(() => res),
+    send: jest.fn(),
+  };
+  const next = jest.fn();
+
+  test('로그인 되어있으면 isLoggedIn이 next를 호출해야 함', () => {
+    const req = {
+      isAuthenticated: jest.fn(() => true),
+    };
+    isLoggedIn(req, res, next);
+    expect(next).toBeCalledTimes(1);
+  });
+
+  test('로그인 되어있지 않으면 isLoggedIn이 에러를 응답해야 함', () => {
+    const req = {
+      isAuthenticated: jest.fn(() => false),
+    };
+    isLoggedIn(req, res, next);
+    expect(res.status).toBeCalledWith(403);
+    expect(res.send).toBeCalledWith('로그인 필요');
+  });
+});
+
+describe('isNotLoggedIn', () => {
+  const res = {
+    redirect: jest.fn(),
+  };
+  const next = jest.fn();
+
+  test('로그인 되어있으면 isNotLoggedIn이 에러를 응답해야 함', () => {
+    const req = {
+      isAuthenticated: jest.fn(() => true),
+    };
+    isNotLoggedIn(req, res, next);
+    const message = encodeURIComponent('로그인한 상태입니다.');
+    expect(res.redirect).toBeCalledWith(`/?error=${message}`);
+  });
+
+  test('로그인 되어있지 않으면 isNotLoggedIn이 next를 호출해야 함', () => {
+    const req = {
+      isAuthenticated: jest.fn(() => false),
+    };
+    isNotLoggedIn(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+먼저 isLoggedIn 부터 테스트해보겠다. req, res, next를 모킹했다. 함수를 모킹할 때는 jest.fn 메서드를 사용한다. 함수의 반환값을 지정하고 싶다면 jest.fn(()=>반환값)을 사용하면 된다. isAuthenticated는 로그인 여부를 알려주는 함수이므로 테스트 내용에 따라 true나 false를 반환하고, res.status는 res.status(403).send('hello') 처럼 메서드 체이닝이 가능해야 하므로 res를 반환하고 있다.
+
+실제로는 req나 res 객체에 많은 속성과 메서드가 들어 있겠지만, 지금 테스트에서는 isAuthenticated나 status, send만 사용하므로 나머지는 과감하게 제외하면 된다. 
+
+test 함수 내부에서는 모킹된 객체와 함수를 사용해 isLoggedIn 미들웨어를 호출한 후 expect로 원하는 내용대로 실행되었는지 체크하면 된다. toBeCalledTimes(숫자)는 정확하게 몇 번 호출되었는지를 체크하는 메서드고, toBeCalledWith(인수)는 특정 인수와 함께 호출되었는지를 체크하는 메서드이다. 
+
+테스트를 돌려보면 모두 통과한다.
+
+원하는 결과가 실행되었으므로 테스트를 통과한다. 황당하지만, 작성하지 않은 두 개의 테스트도 통과한다. 이것이 테스트를 한다고 해서 에러가 없음을 보장할 수없는 이유이다. 테스트 대상을 잘못 선정하거나 잘못된 방식으로 테스트한 경우에는 테스트를 작성했더라도 에러가 발생할 수 있다. 테스트를 올바르게 작성하는 데는 많은 훈련과 연습이 필요하다.
+
+isNotLoggedIn 부분도 작성한다.
+
+테스트는 통과할 것이다. 이렇게 작은 단위의 함수나 모듈이 의도된 대로 정확히 작동하는지 테스트하는 것을 유닛 테스트 또는 단위 테스트라고 부른다. 나중에 함수를 수정하면 기존에 작성해둔 테스트는 실패하게 된다. 따라서 함수가 수정되었을 때 어떤 부분이 고장나는지를 테스트를 통해 알 수 있다. 테스트 코드도 기존 코드가 벼경된 것에 맞춰서 수정해야 한다.
+
+라우터와 긴밀하게 연결되어 있는 미들웨어도 테스트해보겠다. 단, 이때는 유닛 테스트를 위해 미들웨어를 분리해야 한다.
+
+user.js를 다시 한번 보면 POST /:id/follow 라우터의 async 함수 부분은 따로 분리할 수 있다. controllers 폴더를 만들고 그 안에 user.js를 만든다. 라우터에서 응답을 보내는 미들웨어를 특별히 컨트롤러라고 부른다. 컨트롤러를 분리했으므로 routes/user.js도 따라서 수정한다.
+
+controllers/user.js
+```js
+const User = require('../models/user');
+
+exports.addFollowing = async (req, res, next) => {
+  try {
+    const user = await User.findOne({ where: { id: req.user.id } });
+    if (user) {
+      await user.addFollowing(parseInt(req.params.id, 10));
+      res.send('success');
+    } else {
+      res.status(404).send('no user');
+    }
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+};
+```
+
+routes/user.js
+```js
+const express = require('express');
+
+const { isLoggedIn } = require('./middlewares');
+const { addFollowing } = require('../controllers/user');
+
+const router = express.Router();
+
+router.post('/:id/follow', isLoggedIn, addFollowing);
+
+module.exports = router;****
+```
+
+이제 addFollowing 컨트롤러를 테스트해야 하는데, controllers/user.test.js를 작성한다.
+
+user.test.js
+```js
+const { addFollowing } = require('../controllers/user');
+
+describe('addFollowing', () => {
+  const req = {
+    user: { id: 1 },
+    params: { id: 2 },
+  };
+  const res = {
+    send: jest.fn(),
+  };
+  const next = jest.fn();
+
+  test('사용자를 찾아 팔로잉을 추가하고 success를 응답해야 함', async () => {
+    await addFollowing(req, res, next);
+    expect(res.send).toBeCalledWith('success');
+  });
+
+  test('사용자를 못 찾으면 next(error)를 호출함', async () => {
+    const error = '사용자 못 찾음';
+    await addFollowing(req, res, next);
+    expect(next).toBeCalledWith(error);
+  });
+});
+```
+
+addFollowing 컨트롤러가 async 함수이므로 await을 붙여야 컨트롤러가 실행 완료된 후 expect 함수가 실행된다. 그런데 이 테스트는 실패한다.
+
+바로 User 모델 때문이다. addFollowing 컨트롤러 안에는 User라는 모델이 들어 있다. 이 모델은 실제 데이터베이스와 연결되어 있으므로 테스트 환경에서는 사용할 수 없다. 따라서 User 모델도 모킹해야 한다.
+
+user.test.js
+```js
+jest.mock('../models/user');
+const User = require('../models/user');
+const { addFollowing } = require('../controllers/user');
+
+describe('addFollowing', () => {
+  const req = {
+    user: { id: 1 },
+    params: { id: 2 },
+  };
+  const res = {
+    send: jest.fn(),
+  };
+  const next = jest.fn();
+
+  test('사용자를 찾아 팔로잉을 추가하고 success를 응답해야 함', async () => {
+    User.findOne.mockReturnValue(Promise.resolve({
+      addFollowing(id) {
+        return Promise.resolve(true);
+      }
+    }));
+    await addFollowing(req, res, next);
+    expect(res.send).toBeCalledWith('success');
+  });
+
+  test('사용자를 못 찾으면 next(error)를 호출함', async () => {
+    const error = '사용자 못 찾음';
+    User.findOne.mockReturnValue(Promise.reject(error));
+    await addFollowing(req, res, next);
+    expect(next).toBeCalledWith(error);
+  });
+});
+```
+
+jest.mock 메서드에 모킹할 모듈의 경로를 인수로 넣고, 그 모듈을 불러온다. jest.mock에서 모킹할 메서드에 mockReturnValue라는 메서드를 넣는다. 이 메서드로 가짜 반환값을 지정할 수 있다.
+
+첫 번째 테스트에서는 mockReturnValue 메서드를 통해 User.findOne이 {addFollowing()} 객체를 반환하도록 했다. 사용자를 찾아서 팔로잉을 추가하는 상황을 테스트하기 위해서이다. 프로미스를 반환해야 다음에 await user.addFollowing 메서드를 호출할 수 있다. 두 번째 테스트에서는 null을 반환하여 사용자를 찾지 못한 상황을 테스트한다. 세 번째 테스트에서는 Promise.reject로 에러가 발생하도록 했다. DB 연결에 에러가 발생한 상황을 모킹한 것이다.
+
+실제 데이터베이스에 팔로잉을 등록하는 것이 아니므로 제대로 테스트되는 것인지 걱정할 수도 있다. 이처럼 테스트를 해도 실제 서비스의 실제 데이터베이스에서는 문제가 발생할 수 있다. 그럴 때는 유닛 테스트 말고 다른 종류의 테스트를 진행해야 한다. 이를 점검하기 위해 통합 테스트나 시스템 테스트를 하곤 한다. 
