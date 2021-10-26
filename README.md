@@ -5547,3 +5547,1271 @@ jest.mock 메서드에 모킹할 모듈의 경로를 인수로 넣고, 그 모�
 첫 번째 테스트에서는 mockReturnValue 메서드를 통해 User.findOne이 {addFollowing()} 객체를 반환하도록 했다. 사용자를 찾아서 팔로잉을 추가하는 상황을 테스트하기 위해서이다. 프로미스를 반환해야 다음에 await user.addFollowing 메서드를 호출할 수 있다. 두 번째 테스트에서는 null을 반환하여 사용자를 찾지 못한 상황을 테스트한다. 세 번째 테스트에서는 Promise.reject로 에러가 발생하도록 했다. DB 연결에 에러가 발생한 상황을 모킹한 것이다.
 
 실제 데이터베이스에 팔로잉을 등록하는 것이 아니므로 제대로 테스트되는 것인지 걱정할 수도 있다. 이처럼 테스트를 해도 실제 서비스의 실제 데이터베이스에서는 문제가 발생할 수 있다. 그럴 때는 유닛 테스트 말고 다른 종류의 테스트를 진행해야 한다. 이를 점검하기 위해 통합 테스트나 시스템 테스트를 하곤 한다. 
+
+### 테스트 커버리지
+유닛 테스트를 작성하다 보면, 전체 코드 중에서 어떤 부분이 테스트되고 어떤 부분이 테스트되지 않는지 궁금해진다. 어떤 부분이 테스트되지 않는지를 알아여 나중에 그 부분의 테스트 코드를 작성할 수 있다. 전체 코드 중에서 테스트되고 있는 코드의 비율과 테스트되고 있지 않은 코드의 위치를 알려주는 jest의 기능이 있다. 바로 커버리지 기능이다.
+
+커버리지 기능 사용을 위해 package.json에 jest 설정을 입력한다.
+```json
+"coverage" : "jest --coverage"
+```
+
+jest 명령어 뒤에 --coverage 옵션을 붙이면 jest가 테스트 커버리지를 분석한다.
+
+```
+npm run coverage
+```
+
+테스트 결과가 출력되고, 추가적으로 표가 하나 더 출력된다. 표의 열을 살펴보면, 각각 File, % Stmts, % Branch, % Funcs, % Lines, Uncovered Line #s 이다. 퍼센티지가 높을 수록 많은 코드가 테스트되었다는 뜻이다.
+
+models 폴더에 user 테스트 파일을 만들고 커버리지를 실행해보면 테스트 커버리지가 대폭 올라간 것을 볼 수 있다. 모든 코드가 테스트되고 있는 상황은 아니기에 테스트 커버리지를 높이는 것에 너무 집착하기보다는 필요한 부분 위주로 올바르게 테스트하는 것이 좋다.
+
+### 통합 테스트 
+하나의 라우터를 통째로 테스트해볼 것이다. routes 폴더에 auth.test.js를 작성한다. 하나의 라우터에는 여러 개의 미들웨어가 붙어 있고, 다양한 라이브러리가 사용된다. 이런 것들이 모두 유기적으로 잘 작동하는지 테스트하는 것이 통합 테스트이다.
+
+supertest를 설치한다.
+
+supertest 패키지를 사용해 auth.js의 라우터들을 테스트할 것이다. supertest를 사용하기 위해서는 app 객체를 모듈로 만들어 분리해야 한다. app.js 파일에서 app 객체를 모듈로 만든 후 server.js에서 불러와 listen한다. server.js는 app의 포트 리스닝만 담당한다.
+
+config.json에 test 속성을 수정하고 데이터베이스를 생성한다.
+
+npx sequelize db:create --env test
+
+이제 테스트 코드를 작성하면 된다. routes/auth.test.js 파일을 작성한다.
+
+```js
+const request = require('supertest');
+const {sequelize} = require('../models');
+const app = require('../app');
+
+beforeAll(async () => {
+  await sequelize.sync();
+});
+
+describe('POST /login', () => {
+  test('로그인 수행', (done) => {
+    request(app)
+      .post('/auth/login')
+      .send({
+        email: 'zerohch0@gmail.com',
+        password: 'nodejsbook',
+      })
+      .expect('Location', '/')
+      .expect(302, done);
+  });
+})
+```
+
+beforeAll이라는 함수가 추가되었다. 현재 체스트를 실행하기 전에 수행되는 코드이다. 여기에 sequelize.sync()를 넣어 데이터베이스에 테이블을 생성하고 있다. 비슷한 함수로 afterAll, beforeEach, afterEach가 있다. 테스트를 위한 값이나 외부 환경을 설정할 때 세트스 전후로 수행할 수 있도록 사용하는 함수이다.
+
+supertest 패키지로부터 request 함수를 불러와서 app 객체를 인수로 넣는다. 여기에 get, post, put, patch, delete 등의 메서드로 원하는 라우터에 요청을 보낼 수 있다. 데이터는 send 메서드에 담아서 보낸다. 그 후 예상되는 응답의 결과를 expect 메서드의 인수로 제공하면 그 값이 일치하는지 테스트한다. 현재 테스트에서는 Location 헤더가 /인지, 응답의 상태 코드가 302인지 테스트하고 있다. done을 두 번째 인수로 넣어서 테스트가 마무리되었음을 알려야 한다.
+
+supertest를 사용하면 app.listen을 수행하지 않고도 서버 라우터를 실행할 수 있다. 통합 테스트를 할 때는 모킹을 최소한으로 하는 것이 좋지만, 직접적인 테스트 대상이 아닌 경우에는 모킹해도 된다. 테스트를 실행하면 실패한다.
+
+테스트용 데이터베이스에는 현재 회원 정보가 없다. 따라서 로그인 할 때 loginError가 발생하게 된다. 로그인 라우터를 테스트하기 전에 회원가입 라우터부터 테스트해서 회원 정보를 넣어야 한다.
+
+테스트를 수행하면 성공한다. 그런데 이전에 성공했던 테스트를 다시 수행하면 이번에는 실패한다. 실패하는 이유는 이전 테스트에서 이미 설정한 계정을 생성했기 떄문이다. 이처럼 테스트 후에 데이터베이스에 데이터가 남아 있으면 다음 테스트에 영향을 미칠 수도 있다. 따라서 테스트 종료 시 데이터를 정리하는 코드를 추가해야 한다. 보통 afterAll에 정리하는 코드를 추가한다. 
+
+시퀄라이즈를 쓰지 않더라도 afterAll에 데이터를 정리하는 코드를 넣으면 된다. 테스트를 다시 수행하면 성공한다.
+
+### 부하 테스트
+서버가 얼마만큼의 요청을 견딜 수 있는지 테스트하는 방법이다.
+
+내 코드가 실제로 배포되었을 때 어떤 문법적, 논리적 문제가 있을지는 유닛 테스트와 통합 테스트를 통해 어느 정도 확인할 수 있다. 그러나 내 서버가 몇 명의 동시 접속자나 일일 사용자를 수용할 수 있는지 예측하는 일은 매우 어렵다. 특히 실제 서비스 중이 아니라 개발 중일 때는 예측하는 것이 더 어려워진다.
+
+코드에 문법적, 논리적 문제가 없더라도 서버의 하드웨어 제약 때문에 서비스가 중단될 수 있다. 대표적인 것이 OOM 문제이다. 서버는 접속자들의 정보를 저장하기 위해 각각의 접속자마다 일정한 메모리를 할당한다. 이렇게 사용하는 메모리의 양이 증가하다가 서버의 메모리 용량을 넘어서게 되면 문제가 발생한다. 부하 테스트를 통해 이를 어느 정도 예측할 수 있다. artillery를 설치하고 서버를 실행한다.
+
+```
+npm i -D artillery
+npm start
+```
+
+새로운 콘솔을 하나 더 띄운 후 다음 명령어를 입력한다. npx artillery quick --count 100 -n 50 http://localhost:8001 명령어는 해당 주소에 빠르게 부하 테스트를 하는 방법이다. --count 옵션은 가상의 사용자 수를 으ㅟ미하고, -n 옵션은 요청 횟수를 의미한다. 100명의 가상 사용자가 50번씩 요청을 보내므로 총 5000번의 요청이 서버로 전달된다. 너무 많다고 생각할 수도 있지만, 실제 서비스를 할 때 5000번의 요청은 그렇게 많은 양이 아니다. 단지 절대적인 숫자가 중요한 것이 아니라, 하나의 요청이 얼마나 많은 작업을 하는지가 더 중요하다.
+
+콘솔을 보면 가상의 사용자 100명이 생성되고, 그들의 요청이 완료되었으며, 총 요청이 5000번 수행되었음을 알 수 있다. 초당 900.9번의 요청이 처리 되었다. Request latency를 주목해서 보면 좋은데, 최소 2밀리초, 최대 171밀리초가 걸렸다. 중간 값은 63이고 하위 95퍼센트의 값은 138, 하위 99값은 155이다. 이 수치는 해석하기 나름이지만, 보통 median과 p95의 차이가 크지 않으면 좋다. 수치의 차이가 적을수록 대부분의 요청이 비슷한 속도로 처리되었다는 의미이다.
+
+Scenarios counts는 총 사용자의 수를 보여주고, Codes는 HTTP 상태 코드를 나타낸다. 5000 건의 요청 모두 200 응답 코드를 받았다. 혹시나 에러가 발생한다면 Errors 항목이 추가로 생긴다.
+
+부하 테스트를 할 떄 단순히 한 페이지에만 요청을 보내는 것이 아니라 실제 사용자의 행동을 모방하여 시나리오를 작성할 수 있다. 이때는 JSON 형식의 설정 파일을 작성해야 한다.
+
+loadtest.json
+```json
+{
+  "config":{
+    "target": "http://localhost:8001",
+    "phases": [
+      {
+        "duration": 60,
+        "arrivalRate": 30
+      }
+    ]
+  },
+  "scenarios": [{
+    "flow": [{
+      "get": {
+        "url": "/"
+      }
+    }, {
+      "post": {
+        "url": "/auth/login",
+        "json": {
+          "email": "zerohch0@naver.com",
+          "password": "nodejsbook"
+        }
+      }
+    }, {
+      "get": {
+        "url": "/hashtag?hashtag=nodebird"
+      }
+    }]
+  }]
+}
+```
+
+config 객체에서 target을 현재 서버로 잡고, phases에서 60초 동아느 매초 30명의 사용자를 생성하도록 했다. 즉, 1800명이 접속하는 상황이다.
+
+이제 이 가상 사용자들이 어떠한 동작을 할지 scenarios 속성에 적는다. 첫 번째 flow로는 먼저 페인페이지에 접속하고, 로그인을 한 후 해시태그 검색을 한다. 로그인할 때 요청의 본문으로 email과 password를 JSON 형식으로 보냈다. 아직 flow가 하나뿐이지만, 첫 번째 flow와 는 다른 일련의 과정을 시뮬레이션하고 싶다면 두 번쨰 flow로 만들면 된다.
+
+npx artillery run 파일명 명령어로 부하 테스트를 실행한다. 1800명의 접속자가 각각 네 번의 요청을 보내서 총 7200 번의 요청이 전송된다. 각각의 요청이 모두 데이터베이스에 최소 한 번씩 접근하므로 상당히 무리가 간다.
+
+```
+Summary report @ 10:52:05(+0900) 2021-10-26
+  Scenarios launched:  1800
+  Scenarios completed: 1800
+  Requests completed:  9000
+  Mean response/sec: 148.69
+  Response time (msec):
+    min: 0
+    max: 42
+    median: 1
+    p95: 4
+    p99: 8
+  Scenario counts:
+    0: 1800 (100%)
+  Codes:
+    200: 5400
+    302: 1800
+    404: 1800
+```
+중간 로그를 생략하긴 했지만, 시나리오를 짠 뒤부터는 중간 로그도 챙겨보는 것이 좋다. Request latency를 보면 문제가 심각하다는 것을 알게 된다. 교재에서 저자의 컴퓨터 사양이 안좋은지는 모르지만, 학교에서 지급받은 맥북이 좀 빨라서 ;; 오래 걸리지 않았다.
+
+만약에 테스트를 진행할수록 요청을 처리하는 속도가 점점 느려짐을 알게 된다면, 이는 서버가 지금 부하 테스트를 하는 정도의 요청을 감당하지 못한다는 뜻이다. 따라서 이 문제를 해결할 방법을 고민해봐야 한다. 서버의 사양을 업그레이드하거나, 서버를 여러개 두거나, 코드를 더 효율적으로 개선하는 방법이 있다. 지금 상황에서는 노드가 싱글 코어만 사용하고 있으므로 클러스터링 같은 기법을 통해 서버를 여러 개 실행하는 것을 우선적으로 시도해볼 만하다.
+
+일반적으로 요청-응답 시 데이터베이스에 접근할 때 가장 많은 시간이 소요된다. 서버는 여러 대로 늘리기 쉽지만, 데이터베이스는 늘리기 어려우므로 하나의 데이터베이스에 많은 요청이 몰리곤한다. 따라서 최대한 데이터베이스에 접근하는 요청을 줄이면 좋다. 반복적으로 가져오는 데이터는 캐싱을 한다든지 하여 데이터베이스에 접근하는 일을 줄이도록 한다.
+
+##### 노드 서비스 테스트하기 끝
+
+<hr>
+
+## 웹 소켓으로 실시간 데이터 전송하기
+(저자의 말) 웹 소켓을 사용하여 실시간으로 데이터를 주고받는 방법을 배워보겠습니다. 실시간으로 데이터를 전달할 수 있으면 만들 수 있는 앱의 폭이 넓어집니다. 웹 소켓의 개념을 먼저 익히고 웹 소켓을 사용하여 GIF 채팅방을 만들어보겠습니다.
+
+### 웹 소켓 이해하기
+노드 생태계에서는 웹 소켓이란 말을 들으면 Socket.IO를 먼저 떠올리는 경우가 많다. 하지만 Socket.IO는 웹 소켓을 활용한 라이브러리일 뿐이며 웹 소켓 그 자체는 아니다. 나중에 이를 사용하기 위해서는 기반 기술인 웹 소켓에 대해 먼저 알아야 한다.
+
+웹 소켓은 HTML5에 새로 추가된 스펙으로 실시간 양방향 데이터 전송을 위한 기술이며, HTTP와 다르게 WS라는 프로토콜을 사용한다. 따라서 브라우저와 서버가 WS 프로토콜을 지원하면 사용할 수 있다. 최신 브라우저는 대부분 웹 소켓을 지원하고, 노드에서는 ws나 Socket.IO 같은 패키지를 통해 웹 소켓을 사용할 수 있다.
+
+웹 소켓이 나오기 이전에는 HTTP 기술을 사용하여 실시간 데이터 전송을 구현했다. 그 중 한가지가 폴링이라고 불리는 방식이다. HTTP가 클라이언트에서 서버로 향하는 단방향 통신이므로 주기적으로 서버에 새로운 업데이트가 있는지 확인하는 요청을 보낸 후, 있다면 새로운 내용을 가져오는 단순 무식한 방법이었다.
+
+그러다가 HTML5가 나오면서 웹 브라우저와 우베 서버가 지속적으로 연결된 라인을 통해 실시가능로 데이터를 주고받을 수 있는 웹 소켓이 등장했다. 처음에 웹 소켓 연결이 이루어지고 나면 그 다음부터는 계속 연결된 상태로 있으므로 따로 업데이트가 있는지 요청을 보낼 필요가 없다. 업데이트할 내용이 생겼다면 서버에서 바로 클라이언트에 알린다. HTTP 프로토콜과 포트를 공유할 수 있으므로 다른 포트에 연결할 필요도 없다. 폴링 방식에 비해 성능도 매우 개선되었다.
+
+참고로 서버센트 이벤트라는 기술도 등장했다. EventSource라는 객체를 사용하는데, 처음에 한 번만 연결하면 서버가 클라이언트에 지속적으로 데이터를 보낸다. 웹 소켓과 다른 점은 클라이언트에서 서버로는 데이터를 보낼 수 없다는 것이다. 즉, 서버에서 클라이너트로 데이터를 보내는 단방향 통신이다. 따라서 웹 소켓만이 진정한 양방향 통신이다. 양방향 통신이므로 SNS에서 새로운 게시물 가져오기 등 굳이 양방향 통신이 필요 없는 경우도 많다. 서버에서 일방적으로 데이터를 내려주기만 하면 되기 때문이다. 
+
+Socket.IO는 웹 소켓을 편리하게 사용할 수 있도록 도와주는 라이브러리 이다. Socket.IO는 웹 소켓을 지원하지 않는 IE9 과 같은 브라우저에서는 알아서 웹 소켓 대신 폴링 방식을 사용하여 실시간 데이터 전송을 가능하게 한다. 클라이너트 측에서 웹 소켓 연결이 끊겼다면 자동으로 재연결을 시도하고, 채팅방을 쉽게 구현할 수 있도록 메서드를 준비해두었다.
+
+### ws 모듈로 웹 소켓 사용하기
+먼저 gif-chat이라는 새로운 프로젝트를 만든다.
+
+app.js
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const nunjucks = require('nunjucks');
+const dotenv = require('dotenv');
+
+dotenv.config();
+const webSocket = require('./socket');
+const indexRouter = require('./routes');
+
+const app = express();
+app.set('port', process.env.PORT || 8005);
+app.set('view engine', 'html');
+
+nunjucks.configure('views', {
+    express: app,
+    watch: true
+});
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({extended: false}));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(session({
+    resave:false,
+    saveUninitialized:false,
+    secret : process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly: true,
+        secure: false
+    }
+}));
+
+app.use('/', indexRouter);
+
+app.use((req, res, next) => {
+    const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+    error.status = 404;
+    next(error);
+});
+
+app.use((err, req, res, next) => {
+    res.locals.message = err.message;
+    res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+    res.status(err.status || 500);
+    res.render('error');
+});
+
+const server = app.listen(app.get('port'), ()=> {
+    console.log(app.get('port'), '번 포트에서 대기 중');
+});
+
+webSocket(server);
+```
+
+routes/index.js
+```js
+const express = require('express');
+
+const router = express.Router();
+router.get('/', (req, res) => {
+    res.render('index');
+});
+
+module.exports = router;
+```
+
+socket.js
+```js
+const WebSocket = require('ws');
+
+module.exports = (server) => {
+  const wss = new WebSocket.Server({ server });
+
+  wss.on('connection', (ws, req) => { // 웹소켓 연결 시
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    console.log('새로운 클라이언트 접속', ip);
+    ws.on('message', (message) => { // 클라이언트로부터 메시지
+      console.log(message.toString());
+    });
+    ws.on('error', (error) => { // 에러 시
+      console.error(error);
+    });
+    ws.on('close', () => { // 연결 종료 시
+      console.log('클라이언트 접속 해제', ip);
+      clearInterval(ws.interval);
+    });
+
+    ws.interval = setInterval(() => { // 3초마다 클라이언트로 메시지 전송
+      if (ws.readyState === ws.OPEN) {
+        ws.send('서버에서 클라이언트로 메시지를 보냅니다.');
+      }
+    }, 3000);
+  });
+};
+```
+
+ws 모듈을 불러온 후 익스프레스 서버를 웹 소켓 서버와 연결했다. 익스프레스와 웹 소켓은 같은 포트를 공유할 수 있으므로 별도의 작업이 필요하지 않다.
+
+연결 후에는 웹 소켓 서버에 이벤트 리스너를 붙인다. 웹 소켓은 이벤트 기반으로 작동한다고 생각하면 된다. 실시간으로 데이터를 전달받으므로 항상 대기하고 있어야 한다. connection 이벤트는 클라이언트가 서버와 웹 소켓 연결을 맺을 때 발생한다. req.headers['x-forwarded-for'] || req.connection.remoteAddress 는 클라이언트의 IP를 알아내는 유명한 방법 중 하나이므로 알아두는 게 좋다. 익스프레스에서는 IP를 확인할 때, proxy-addr 패키지를 사용하므로 이 패키지를 사용해도 괜찮다. 로컬 호스트로 접속한 경우, 크롬에서는 IP가 ::1로 뜬다. 다른 브라우저에서는 ::1 외의 다른 IP가 뜰 수 있다.
+
+익스프레스 서버와 연결한 후, 웹 소켓 객체에 이벤트 리스너 세 개, 즉 message, error, close 를 연결했다. message는 클라이언트로부터 메시지가 왔을 때 발생하고, error는 웹 소켓 연결 중 문제가 생겼을 때 발생한다. close 이벤트는 클라이언트와 연결이 끊겼을 때 발생한다.
+
+setInterval 은 3초마다 연결된 모든 클라이언트에 메세지를 보내는 부분이다. 먼저 readyState가 OPEN 상태인지 확인한다. 웹 소켓에는 네 가지 상태가 있다. CONNECTING, OPEN, CLOSING, CLOSED 이다. OPEN 일 때만 에러 없이 메시지를 보낼 수 있다. 확인 후 ws.send 메서드로 하나의 클라이언트에 메시지를 보낸다. close 이벤트에서 setInterval을 clearInterval로 정리하는 것도 꼭 기억해두길 바란다. 이 부분이 없다면 메모리 누수가 발생한다. 프로그래밍을 할 때는 이렇게 사소한 것이 큰 영향을 미치기도 한다.
+
+웹 소켓은 단순히 서버에서 설정한다고 해서 작동하지는 않는다. 클라이언트에서도 웹 소켓을 사용해야 한다. 양방향 통신이기 떄문이다. views 폴더를 만들고 index.html 파일을 작성하여, script 태그에 웹 소켓 코드를 넣는다. views 폴더 안에 error.html도 같이 작성한다.
+
+WebSocket 생성자에 연결할 서버 주소를 넣고 webSocket 객체를 생성한다. 서버 주소의 프로토콜이 ws인 것에 주의해야한다. 클라이언트에서도 역시 이벤트 기반으로 동작한다. 서버와 연결이 맺어지는 경우에는 onopen 이벤트 리스너가 호출되고, 서버로부터 메시지가 오는 경우에는 onmessage 이벤트 리스너가 호출된다. 서버에서 메시지가 오면 서버로 답장을 보낸다.
+
+서버를 실행하는 순간, 서버는 클라이언트에 3초마다 메시지를 보내고, 클라이언트도 서버로부터 메시지가 오는 순간 바로 답장을 보낸다. 브라우저와 노드 콘솔에서 결과를 확인해보면 접속하는 순간부터 노드의 콘솔과 브라우저의 콘솔에 3초마다 메시지가 찍힌다.
+
+크롬 외 다른 브라우저를 열어 http://localhost:8005 에 접속해보면 역시 3초마다 서버로부터 메시지가 온다.
+
+클라이언트로부터 노드 서버에 오는 메시지의 양이 이전에 비해 두 배가 되었다. 두 클라이언트와 연결 중이기 때문이다. 브라우저 하나를 종료하면 접속 해제라는 메시지가 뜨고 다시 메시지의 양이 하나가 된다.
+
+### Socket.IO 사용하기
+ws 패키지는 간단하게 웹 소켓을 사용하고자 할 때 좋다. 하지만 구현하려는 서비스가 좀 더 복잡해진다면 Socket.IO를 사용하는 것이 편하다. Socket.IO가 할 수 있는 일을 ws 패키지가 못한다는 뜻은 아니고, 편의 기능이 Socket.IO에 많이 있다는 뜻이다.
+
+먼저 Socket.IO를 설치한다.
+
+```
+npm i socket.io@2
+```
+
+그리고 ws 패키지 대신 Socket.IO를 연결한다.
+
+socket.js
+```js
+const SocketIO = require('socket.io');
+
+module.exports = (server) => {
+  const io = SocketIO(server, {path: '/socket.io'});
+
+  io.on('connection', (socket) => { // 웹소켓 연결 시
+    const req = socket.request;
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    console.log('새로운 클라이언트 접속', ip, socket.id, req.ip);
+    socket.on('disconnect', ()=> {
+        console.log('클라이언트 접속 해제', ip, socket.id);
+        clearInterval(socket.interval);
+    });
+    socket.on('error', (error) => {
+        console.error(error);
+    });
+    socket.on('reply', (data) => {
+        console.log(data);
+    });
+    socket.interval = setInterval(() => {
+        socket.emit('news', 'Hello Socket.IO');
+    }, 3000);
+  });
+};
+```
+
+아직까지는 ws 패키지와 크게 다른 점이 없다. 먼저 불러와서 익스프레스 서버와 연결한다. SocketIO 객체의 두 번째 인수로 옵션 객체를 넣어 서버에 관한 여러 가지 설정을 할 수 있다. 여기서는 클라이언트가 접속할 경로인 path 옵션만 사용했다. 클라이언트에서도 이 경로와 일치하는 path를 넣어야 한다.
+
+연결 후에는 이벤트 리스너를 붙인다. connection 이벤트는 클라이언트가 접속했을 때 발생하고, 콜백으로 소켓 객체를 제공한다. io와 socket 객체가 Socket.IO의 핵심이다. socket.request 속성으로 요청 객체에 접근할 수 있다. socket.request.res로는 응답 객체에 접근할 수 있다. 또한, socket.id로 소켓 고유의 아이디를 가져올 수 있다. 이 아이디로 소켓의 주인이 누구인지 특정할 수 있다.
+
+socket에도 이벤트 리스너를 붙였다. disconnect는 클라이언트가 연결을 끊었을 때 발생하고, error는 통신 과정에서 에러가 나왔을 때 발생한다. reply는 사용자가 직접 만든 이벤트이다. 클라이언트에서 reply라는 이벤트명으로 데이터를 보낼 때 서버에서 받는 부분이다. 이렇게 이벤트명을 사용하는 것이 ws 모듈과는 다르다.
+
+아래에 emit 메서드로 3초마다 클라이언트 한 명에게 메시지를 보내는 부분이 있는데, 인수가 두 개이다. 첫 번째 인수는 이벤트 이름, 두 번째 인수는 데이터이다. 즉, news라는 이벤트 이름으로 Hello Socket.IO라는 데이터를 클라이언트에 보낸 것이다. 클라이언트가 이 메시지를 받기 위해서는 news 이벤트 리스너를 만들어두어야 한다.
+
+클라이언트 부분도 바꾸어 준다.
+
+index.html
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>GIF 채팅방</title>
+</head>
+<body>
+<div>F12를 눌러 console 탭과 network 탭을 확인하세요.</div>
+<script>
+  const socket = io.connect('http://localhost:8005', {
+      path: '/socket.io'
+  });
+  socket.on('news', function (data){
+    console.log(data);
+    socket.emit('reply', 'Hello Node.JS');
+  });
+</script>
+</body>
+</html>
+```
+
+/socket/socket.io.js는 Socket.IO에서 클라이언트로 제공하는 스크립트이며, 실제 파일이 아니다. 이 스크립트를 통해 서버와 유사한 API로 웹 소켓 통신이 가능하다. 스크립트가 제공하는 io 객체에 서버 주소를 적어 연결한다. ws 프로토콜이 아니라 http 프로토콜을 사용한다는 점이 ws 모듈과 다르다. 옵션으로 path를 주었는데 이 부분이 서버의 path 옵션과 일치해야 통신이 가능하다.
+
+서버에서 보내는 news 이벤트를 받기 위해 news 이벤트 리스너를 붙여두었다. news 이벤트가 발생하면 emit 메서드로 다시 서버에 답장을 한다. 서버의 reply 이벤트 리스너로 답장이 간다.
+
+서버를 실행하고 접속해서 network 탭을 보면 조금 독특한 것을 발견할 수 있다. 웹 소켓 연결 말고도 폴링 연결이 있다.
+
+Socket.IO는 먼저 폴링 방식으로 서버와 연결한다. 그래서 코드에서 HTTP 프로토콜을 사용한 것이다. 폴링 연결 후, 우베 소켓을 사용할 수 있다면 웹 소켓으로 업그레이드 한다. 웹 소켓을 지원하지 않는 브라우저는 폴링 방식으로, 웹 소켓을 지원하는 브라우저는 웹 소켓 방식으로 사용 가능한 것이다.
+
+처음부터 웹 소켓만 사용하고 싶다면 클라이언트에 transports: ['websocket'] 이라는 옵션을 주면 된다.
+
+### 실시간 GIF 채팅방 만들기
+몽고디비와 몽구스를 사용할 것이다. 몽구스를 설치한 후, 몽구스 스키마를 생성하겠다. 채팅방 스키마와 채팅 내역 스키마만 있으면 된다. 사용자는 익명이니 딱히 저장할 필요가 없다. 사용자의 이름은 랜덤 색상으로 구별하겠다.
+
+먼저 필요한 모듈을 설치한다. 이미지 업로드와 서버에 HTTP 요청에 필요한 multer와 axios 그리고 방금 전에 말했던 랜덤 색상을 구현해주는 모듈인 color-hash를 설치한다.
+
+```
+npm i mongoose multer axios color-hash
+```
+
+먼저 채팅방 스키마를 만든다.
+
+schemas/room.js
+```js
+const mongoose = require('mongoose');
+
+const {Schema} = mongoose;
+const roomSchema = new Schema({
+    title : {
+        type : String,
+        required: true
+    },
+    max : {
+        type : Number,
+        required : true,
+        default : 10,
+        min : 2
+    },
+    owner : {
+        type: String,
+        required :true
+    },
+    password : String,
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+module.exports = mongoose.model('Room', roomSchema);
+```
+방 제목, 최대 수용 인원, 방장, 비밀번호, 생성 시간 등을 받는다. 수용 인원은 기본적으로 10명, 최소 인원은 2명이상으로 설정한다. 채팅방에서 혼자 있으면 아무 의미가 없으니까 비밀번호는 required 속성이 없으므로 꼭 넣지 않아도 되는 것이다. 비밀번호를 설정하면 비밀, 아니면 공개방이다.
+
+이번에는 채팅 스키마를 만든다.
+
+schemas/chat.js
+```js
+const mongoose = require('mongoose');
+
+const {Schema} = mongoose;
+const {Type : {ObjectId}} = Schema;
+const chatSchema = new Schema({
+    room : {
+        type: ObjectId,
+        required: true,
+        ref: 'Room'
+    },
+    user: {
+        type: String,
+        required: true
+    },
+    chat : String,
+    gif : String,
+    createdAt : {
+        type: Data,
+        default: Date.now
+    }
+});
+
+module.exports = mongoose.model ('chat', chatSchema);
+```
+
+채팅방 아이디와 채팅을 한 사람, 채팅 내역, GIF 이미지 주소, 채팅 시간을 저장한다. room 필드는 Room 스키마와 연결하여 Room 컬렉션의 ObjectId가 들어가게 된다. chat 또는 img 필드에 required 속성이 없는 이유는 채팅 메시지나 GIF 이미지 중에서 하나만 저장하면 되기 때문이다.
+
+이제 몽고디비와 연결한다.
+
+schemas/index.js
+```js
+const mongoose = require('mongoose');
+
+const { MONGO_ID, MONGO_PASSWORD, NODE_ENV } = process.env;
+const MONGO_URL = `mongodb://${MONGO_ID}:${MONGO_PASSWORD}@localhost:27017/admin`;
+
+const connect = () => {
+  if (NODE_ENV !== 'production') {
+    mongoose.set('debug', true);
+  }
+  mongoose.connect(MONGO_URL, {
+    dbName: 'gifchat',
+    useNewUrlParser: true,
+    useCreateIndex: true,
+  }, (error) => {
+    if (error) {
+      console.log('몽고디비 연결 에러', error);
+    } else {
+      console.log('몽고디비 연결 성공');
+    }
+  });
+};
+
+mongoose.connection.on('error', (error) => {
+  console.error('몽고디비 연결 에러', error);
+});
+mongoose.connection.on('disconnected', () => {
+  console.error('몽고디비 연결이 끊겼습니다. 연결을 재시도합니다.');
+  connect();
+});
+
+module.exports = connect;
+```
+
+.env 파일에 몽고디비의 아이디와 비밀번호를 작성해준다.
+
+이제 채팅 앱 메인 화면과 채팅방 등록 화면을 만들어보겠다. 채팅뿐만 아니라 채팅방도 실시간으로 추가되거나 제거된다.
+
+화면의 레이아웃을 담당하는 layout.html을 작성하고 error.html을 수정한다.
+
+main.css로 스타일 효과를 주고 메인 화면을 담당하는 main.html 파일을 작성한다.
+
+main.html
+```html
+{% extends 'layout.html' %}
+
+{% block content %}
+<h1>GIF 채팅방</h1>
+<fieldset>
+  <legend>채팅방 목록</legend>
+  <table>
+    <thead>
+    <tr>
+      <th>방 제목</th>
+      <th>종류</th>
+      <th>허용 인원</th>
+      <th>방장</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for room in rooms %}
+      <tr data-id="{{room._id}}">
+        <td>{{room.title}}</td>
+        <td>{{'비밀방' if room.password else '공개방'}}</td>
+        <td>{{room.max}}</td>
+        <td style="color: {{room.owner}}">{{room.owner}}</td>
+        <td>
+          <button
+            data-password="{{'true' if room.password else 'false'}}"
+            data-id="{{room._id}}"
+            class="join-btn"
+          >입장
+          </button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="error-message">{{error}}</div>
+  <a href="/room">채팅방 생성</a>
+</fieldset>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io.connect('http://localhost:8005/room', { // 네임스페이스
+    path: '/socket.io',
+  });
+
+  socket.on('newRoom', function (data) { // 새 방 이벤트 시 새 방 생성
+    const tr = document.createElement('tr');
+    let td = document.createElement('td');
+    td.textContent = data.title;
+    tr.appendChild(td);
+    td = document.createElement('td');
+    td.textContent = data.password ? '비밀방' : '공개방';
+    tr.appendChild(td);
+    td = document.createElement('td');
+    td.textContent = data.max;
+    tr.appendChild(td);
+    td = document.createElement('td');
+    td.style.color = data.owner;
+    td.textContent = data.owner;
+    tr.appendChild(td);
+    td = document.createElement('td');
+    const button = document.createElement('button');
+    button.textContent = '입장';
+    button.dataset.password = data.password ? 'true' : 'false';
+    button.dataset.id = data._id;
+    button.addEventListener('click', addBtnEvent);
+    td.appendChild(button);
+    tr.appendChild(td);
+    tr.dataset.id = data._id;
+    document.querySelector('table tbody').appendChild(tr); // 화면에 추가
+  });
+
+  socket.on('removeRoom', function (data) { // 방 제거 이벤트 시 id가 일치하는 방 제거
+    document.querySelectorAll('tbody tr').forEach(function (tr) {
+      if (tr.dataset.id === data) {
+        tr.parentNode.removeChild(tr);
+      }
+    });
+  });
+
+  function addBtnEvent(e) { // 방 입장 클릭 시
+    if (e.target.dataset.password === 'true') {
+      const password = prompt('비밀번호를 입력하세요');
+      location.href = '/room/' + e.target.dataset.id + '?password=' + password;
+    } else {
+      location.href = '/room/' + e.target.dataset.id;
+    }
+  }
+
+  document.querySelectorAll('.join-btn').forEach(function (btn) {
+    btn.addEventListener('click', addBtnEvent);
+  });
+</script>
+{% endblock %}
+
+{% block script %}
+<script>
+  window.onload = () => {
+    if (new URL(location.href).searchParams.get('error')) {
+      alert(new URL(location.href).searchParams.get('error'));
+    }
+  };
+</script>
+{% endblock %}
+```
+
+io.connect 메서드의 주소가 달라졌다는 것을 알 수 있다. 주소 뒤에 /room이 붙었다. 이 것을 네임스페이스라고 부르며, 서버에서 /room 네임스페이스를 통해 보낸 데이터만 받을 수 있다. 네임스페이스를 여러 개 구분해 주고받을 데이터를 분류할 수 있다.
+
+socket에는 미리 newRoom과 removeRoom 이벤트를 달아두었다. 서버에서 웹 소켓으로 해당 이벤트를 발생시키면 이벤트 리스너의 콜백 함수가 실행된다. 콜백 함수의 내용이 길지만 특별한 것은 없다. 각각 테이블에 새로운 방 목록을 추가하거나 제거하는 코드이다. 입장 버튼을 누르면, 비밀방일 경우 비밀번호를 받고 공개방일 경우 바로 입장시킨다.
+
+채팅방 생성 화면을 담당하는 room.html 파일과 채팅방 화면을 담당하는 chat.html을 작성한다.
+
+채팅 메시지는 세 가지, 즉 내 메시지, 시스템 메시지, 남의 메시지로 구분했다. 메시지 종류에 따라 메시지 디자인이 달라진다. 
+
+스크립트 부분이 복잡하지만 크게 socket.io 연결 부분, socket.io 이벤트 리스너, 폼 전송 부분으로 구분된다. 
+
+socket.io 연결 부분을 살펴보면 io.connect 메서드의 주소가 main.html과는 다르다. 이번에는 네임스페이스가 /chat이다. /room 네임스페이스로 보낸 데이터는 받을 수 없고, /chat 네임스페이스로 보낸 데이터만 받을 수 있다.
+
+socket에는 join, exit 이벤트 리스너를 연결했다. join과 exit은 각각 사용자의 입장과 퇴장에 관한 데이터가 웹 소켓으로 전송될 때 호출된다. 사용자의 입장과 퇴장을 알리는 메시지를 표시한다.
+
+서버의 socket.js에 웹 소켓 이벤트를 연결한다.
+
+```js
+const SocketIO = require('socket.io');
+
+module.exports = (server, app) => {
+    const io = SocketIO(server, { path: '/socket.io' });
+    app.set('io', io);
+    const room = io.of('/room');
+    const chat = io.of('/chat');
+
+    room.on('connection', (socket) => {
+        console.log('room 네임스페이스에 접속');
+        socket.on('disconnect', ()=> {
+            console.log('room 네임스페이스 접속 해제');
+        });
+    });
+
+    chat.on('connection', (socket) => {
+        console.log('chat 네임스페이스에 접속');
+        const req = socket.request;
+        const {headers : {referer}} = req;
+        const roomId = referer
+            .split('/')[referer.split('/').length - 1]
+            .replace(/\?.+/, '');
+        socket.join(roomId);
+    
+        socket.on('disconnect', () => {
+            console.log('chat 네임스페이스 접속 해제');
+            socket.leave(roomId);
+        });
+    });
+};
+```
+
+- app.set('io', io) 로 라우터에서 io 객체를 쓸 수 있게 저장해둔다. req.app.get('io')로 접근할 수 있다.
+- 처음 보는 메서드인 of가 있다. Socket.IO에 네임스페이스를 부여하는 메서드이다. Socket.IO는 기본적으로 / 네임스페이스에 접속하지만, of 메서드를 사용하면 다른 네임스페이스를 만들어 접속할 수 있다. 같은 네임스페이스끼리만 데이터를 전달한다. 현재 채팅방 생성 및 삭제에 관한 정보를 전달하는 /room과 채팅 메시지를 전달하는 /chat이라는 두 개의 네임스페이스를 만들었다. 이렇게 네임스페이스를 구분했으므로 지정된 네임스페이스에 연결한 클라이언트들에게만 데이터를 전달한다.
+- /room 네임스페이스에 이벤트 리스너를 붙여주었다. 네임스페이스마다 각각 이벤트 리스너를 붙일 수 있다.
+- /chat 네임스페이스에 붙인 이벤트 리스너는 /room과 비슷하지만 네임스페이스 접속 시 socket.join 메서드가 있고, 접속 해제시 socket.leave 메서드가 있다. 각각 방에 들어가고 방에서 나가는 메서드이다. 연결이 끊기면 자동으로 방에서 나가지만, 확실히 나가기 위해 추가했다.
+
+Socket.IO에는 네임스페이스보다 더 세부적인 개념으로 방 이라는 것이 있다. 같은 네임스페이스 안에서도 같은 방에 들어 있는 소켓끼리만 데이터를 주고받을 수 있다. join 메서드와 leave 메서드는 방의 아이디를 인수로 받는다. socket.request.headers.referer를 통해 현재 웹 페이지의 url을 가져올 수 있고, url에서 방 아이디 부분을 추출했다.
+
+현재 우리가 사용할 수 있는 고유한 값은 세션 아이디와 소켓 아이디이다. 그런데 매번 페이지를 이동할 때마다 소켓 연결이 해제되고 다시 연결되면서 소켓 아이디가 바뀌게 된다. 따라서 세션 아이디를 사용한다.
+
+color-hash 패키지는 세션 아이디를 HEX 형식의 색상 문자열로 바꿔주는 패키지이다. 해시이므로 같은 세션 아이디는 항상 같은 색상 문자열로 바뀐다. 단, 사용자가 많아질 경우에는 색상이 중복되는 문제가 생길 수 있지만 지금 만드는 채팅 프로그램의 규모에서는 충분히 사용할 수 있다.
+
+app.js
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const nunjucks = require('nunjucks');
+const dotenv = require('dotenv');
+const ColorHash = require('color-hash');
+
+dotenv.config();
+const webSocket = require('./socket');
+const indexRouter = require('./routes');
+const connect = require('./schemas');
+
+const app = express();
+app.set('port', process.env.PORT || 8005);
+app.set('view engine', 'html');
+
+nunjucks.configure('views', {
+    express: app,
+    watch: true
+});
+connect();
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({extended: false}));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(session({
+    resave:false,
+    saveUninitialized:false,
+    secret : process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly: true,
+        secure: false
+    }
+}));
+
+app.use((req, res, next) => {
+    if(!req.session.color) {
+        const colorHash = new ColorHash();
+        req.session.color = colorHash.hex(req.sessionID);
+    }
+    next();
+});
+
+app.use('/', indexRouter);
+
+app.use((req, res, next) => {
+    const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+    error.status = 404;
+    next(error);
+});
+
+app.use((err, req, res, next) => {
+    res.locals.message = err.message;
+    res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+    res.status(err.status || 500);
+    res.render('error');
+});
+
+const server = app.listen(app.get('port'), ()=> {
+    console.log(app.get('port'), '번 포트에서 대기 중');
+});
+
+webSocket(server, app);
+```
+
+세션에 color 속성이 없을 때는 req.sessionID를 바탕으로 color 속성을 생성한다. 앞으로 req.session.color는 사용자 아이디처럼 사용한다.
+
+### 미들웨어와 소켓 연결하기
+입장과 퇴장 때 다른 사람에게 시스템 메시지를 보내려고 한다. 사용자의 이름은 세션에 들어있다. Socket.IO에서 세션에 접근하려면 추가 작업이 필요하다.
+
+Socket.IO도 미들웨어를 사용할 수 있으므로 express-session을 공유하면 된다. 추가로 채팅방 접속자가 0명일 때 방을 제거하는 코드도 추가하겠다.
+
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const nunjucks = require('nunjucks');
+const dotenv = require('dotenv');
+const ColorHash = require('color-hash');
+
+dotenv.config();
+const webSocket = require('./socket');
+const indexRouter = require('./routes');
+const connect = require('./schemas');
+
+const app = express();
+app.set('port', process.env.PORT || 8005);
+app.set('view engine', 'html');
+
+nunjucks.configure('views', {
+    express: app,
+    watch: true
+});
+connect();
+
+const sessionMiddleware = session({
+    resave: false,
+    saveUninitialized : false,
+    secret : process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly: true,
+        secure: false
+    }
+});
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use(express.urlencoded({extended: false}));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(sessionMiddleware);
+app.use(session({
+    resave:false,
+    saveUninitialized:false,
+    secret : process.env.COOKIE_SECRET,
+    cookie: {
+        httpOnly: true,
+        secure: false
+    }
+}));
+
+app.use((req, res, next) => {
+    if(!req.session.color) {
+        const colorHash = new ColorHash();
+        req.session.color = colorHash.hex(req.sessionID);
+    }
+    next();
+});
+
+app.use('/', indexRouter);
+
+app.use((req, res, next) => {
+    const error = new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+    error.status = 404;
+    next(error);
+});
+
+app.use((err, req, res, next) => {
+    res.locals.message = err.message;
+    res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+    res.status(err.status || 500);
+    res.render('error');
+});
+
+const server = app.listen(app.get('port'), ()=> {
+    console.log(app.get('port'), '번 포트에서 대기 중');
+});
+
+webSocket(server, app, sessionMiddleware);
+```
+
+app.js와 socket.js 간에 express-session 미들웨어를 공유하기 위해 변수로 분리했다. socket.js도 수정한다.
+
+socket.js
+```js
+const SocketIO = require('socket.io');
+const axios = require('axios');
+
+module.exports = (server, app, sessionMiddleware) => {
+    const io = SocketIO(server, { path: '/socket.io' });
+    app.set('io', io);
+    const room = io.of('/room');
+    const chat = io.of('/chat');
+
+    io.use((socket, next) => {
+        sessionMiddleware(socket.request, socket.request.res, next);
+    })
+
+    room.on('connection', (socket) => {
+        console.log('room 네임스페이스에 접속');
+        socket.on('disconnect', () => {
+            console.log('room 네임스페이스 접속 해제');
+        });
+    });
+
+    chat.on('connection', (socket) => {
+        console.log('chat 네임스페이스에 접속');
+        const req = socket.request;
+        const { headers: { referer } } = req;
+        const roomId = referer
+            .split('/')[referer.split('/').length - 1]
+            .replace(/\?.+/, '');
+        socket.join(roomId);
+        socket.to(roomId).emit('join', {
+            user: 'system',
+            chat: `${req.session.color}님이 입장하셨습니다.`
+        });
+
+        socket.on('disconnect', () => {
+            console.log('chat 네임스페이스 접속 해제');
+            socket.leave(roomId);
+            const currentRoom = socket.adapter.rooms[roomId];
+            const userCount = currentRoom ? currentRoom.length : 0;
+            if (userCount === 0) {
+                axios.delete(`http://localhost:8005/room/${roomId}`)
+                    .then(() => {
+                        console.log('방 제거 요청 성공');
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                    });
+            } else {
+                socket.to(roomId).emit('exit', {
+                    user: 'system',
+                    chat: `${req.session.color}님이 퇴장하셨습니다.`
+                });
+            }
+        });
+    });
+};
+```
+
+- io.user 메서드에 미들웨어를 장착할 수 있다. 이 부분은 모든 웹 소켓 연결 시마다 실행 된다. 세션 미들웨어에 요청 객체, 응답 객체, next 함수를 인수로 넣으면 된다. 이제 socket.request 객체 안에 socket.request.session 객체가 생성된다.
+- socket.to() 메서드로 특정 방에데이터를 보낼 수 있다. 조금 전에 세션 미들웨어와 Socket.IO를 연결했으므로 웹 소켓에서 세션을 사용할 수 있다. 방에 참여할 때 방에 누군가가 입장했다는 메시지를 보낸다.
+- 접속 해제 시에는 현재 방의 사람 수를 구해서 참여자 수가 0명이면 방을 제거하는 HTTP 요청을 보낸다. socket.adapter.rooms[방 아이디] 에 참여 중인 소켓 정보가 들어 있다. 참여자 수가 0명이 아니면 방에 남아 있는 참여자에게 퇴장했다는 데이터를 보낸다.
+
+이제 라우터 부분을 작성한다. 라우터에서 몽고디비와 웹 소켓 모두에 접근할 수 있다.
+
+routes/index.js
+```js
+const express = require('express');
+
+const Room = require('../schemas/room');
+const Chat = require('../schemas/chat');
+
+const router = express.Router();
+
+router.get('/', async (req, res, next) => {
+  try {
+    const rooms = await Room.find({});
+    res.render('main', { rooms, title: 'GIF 채팅방' });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room', (req, res) => {
+  res.render('room', { title: 'GIF 채팅방 생성' });
+});
+
+router.post('/room', async (req, res, next) => {
+  try {
+    const newRoom = await Room.create({
+      title: req.body.title,
+      max: req.body.max,
+      owner: req.session.color,
+      password: req.body.password,
+    });
+    const io = req.app.get('io');
+    io.of('/room').emit('newRoom', newRoom);
+    res.redirect(`/room/${newRoom._id}?password=${req.body.password}`);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room/:id', async (req, res, next) => {
+  try {
+    const room = await Room.findOne({ _id: req.params.id });
+    const io = req.app.get('io');
+    if (!room) {
+      return res.redirect('/?error=존재하지 않는 방입니다.');
+    }
+    if (room.password && room.password !== req.query.password) {
+      return res.redirect('/?error=비밀번호가 틀렸습니다.');
+    }
+    const { rooms } = io.of('/chat').adapter;
+    if (rooms && rooms[req.params.id] && room.max <= rooms[req.params.id].length) {
+      return res.redirect('/?error=허용 인원이 초과하였습니다.');
+    }
+    return res.render('chat', {
+      room,
+      title: room.title,
+      chats: [],
+      user: req.session.color,
+    });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+router.delete('/room/:id', async (req, res, next) => {
+  try {
+    await Room.remove({ _id: req.params.id });
+    await Chat.remove({ room: req.params.id });
+    res.send('ok');
+    setTimeout(() => {
+      req.app.get('io').of('/room').emit('removeRoom', req.params.id);
+    }, 2000);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+module.exports = router;
+```
+
+GET / 라우터는 채팅방 목록이 보이는 메인 화면을 렌더링하는 라우터고, GET /room 라우터는 채팅방 생성 화면을 렌더링하는 라우터이다. POST /room. GET /room/:id, DELETE /room/:id 라우터를 주목해서 봐야 한다.
+
+- POST /room 라우터는 채팅방을 만드는 라우터이다. app.set('io', io) 로 저장했던 io 객체를 req.app.get('io')로 가져온다. io/of('/room').emit 메서드는 /room 네임스페이스에 연결한 모든 클라이언트에 데이터를 보내는 메서드이다. GET / 라우터에 접속한 모든 클라이언트가 새로 생성된 채팅방에 대한 데이터를 받을 수 있다. 네임스페이스가 따로 없는 경우에는 io.emit 메서드로 모든 클라이언트에 데이터를 보낼 수 있다.
+- GET /room/:id는 채팅방을 렌더링하는 라우터이다. 렌더링 전에 방이 존재하는지, 비밀 방일 경우에는 비밀번호가 맞는지, 허용 인원을 초과하지는 않았는지 검사한다. io.of('/chat').adapter.rooms 에 방 목록이 들어 있다. io.of('/chat').adapter.rooms[req.params.id]를 하면 해당 방의 소켓 목록이 나온다. 이것으로 소켓의 수를 세서 참가 인원의 수를 알아낼 수 있다. 
+- DELETE /room/:id는 채팅방을 삭제하는 라우터이다. 채팅방과 채팅 내역을 삭제한 후 2초 뒤에 웹 소켓으로 /room 네임스페이스에 방이 삭제되었음을 알린다.
+
+### 채팅 구현하기
+프론트에서는 서버에서 보내는 채팅 데이터를 받을 소켓 이벤트 리스너가 필요하다. chat.html 파일에 추가한다.
+
+socket에 chat 이벤트 리스너를 추가했다. chat 이벤트는 채팅 메시지가 웹 소켓으로 전송될 때 호출된다. 채팅 메시지 발송자에 따라 내 메시지인지 남의 메시지인지 확인한 후 그에 맞게 렌더링 한다. 채팅을 전송하는 폼에 submit 이벤트 리스너도 추가했다.
+
+채팅은 여러 가지 방식으로 구현할 수 있다. 현재 GIF 채팅방의 경우에는 채팅 내용을 데이터베이스에 저장하므로 라우터를 거치도록 설계했다.
+
+방에 접속하는 부분과 채팅을 하는 부분을 작성하자
+
+routes/index.js
+```js
+const express = require('express');
+
+const Room = require('../schemas/room');
+const Chat = require('../schemas/chat');
+
+const router = express.Router();
+
+router.get('/', async (req, res, next) => {
+  try {
+    const rooms = await Room.find({});
+    res.render('main', { rooms, title: 'GIF 채팅방' });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room', (req, res) => {
+  res.render('room', { title: 'GIF 채팅방 생성' });
+});
+
+router.post('/room', async (req, res, next) => {
+  try {
+    const newRoom = await Room.create({
+      title: req.body.title,
+      max: req.body.max,
+      owner: req.session.color,
+      password: req.body.password,
+    });
+    const io = req.app.get('io');
+    io.of('/room').emit('newRoom', newRoom);
+    res.redirect(`/room/${newRoom._id}?password=${req.body.password}`);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room/:id', async (req, res, next) => {
+  try {
+    const room = await Room.findOne({ _id: req.params.id });
+    const io = req.app.get('io');
+    if (!room) {
+      return res.redirect('/?error=존재하지 않는 방입니다.');
+    }
+    if (room.password && room.password !== req.query.password) {
+      return res.redirect('/?error=비밀번호가 틀렸습니다.');
+    }
+    const { rooms } = io.of('/chat').adapter;
+    if (rooms && rooms[req.params.id] && room.max <= rooms[req.params.id].length) {
+      return res.redirect('/?error=허용 인원이 초과하였습니다.');
+    }
+    const chats = await Chat.find({ room: room._id }).sort('createdAt');
+    return res.render('chat', {
+      room,
+      title: room.title,
+      chats,
+      user: req.session.color,
+    });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+router.delete('/room/:id', async (req, res, next) => {
+  try {
+    await Room.remove({ _id: req.params.id });
+    await Chat.remove({ room: req.params.id });
+    res.send('ok');
+    setTimeout(() => {
+      req.app.get('io').of('/room').emit('removeRoom', req.params.id);
+    }, 2000);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.post('/room/:id/chat', async (req, res, next) => {
+  try {
+    const chat = await Chat.create({
+      room: req.params.id,
+      user: req.session.color,
+      chat: req.body.chat,
+    });
+    req.app.get('io').of('/chat').to(req.params.id).emit('chat', chat);
+    res.send('ok');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+module.exports = router;
+```
+
+먼저 GET /room/:id 라우터에서 방 접속 시 기존 채팅 내역을 불러오도록 수정한다. 방에 접속할 때는 DB로부터 채팅 내역을 가져오고, 접속 후에는 웹 소켓으로 새로운 채팅 메시지를 받는다. 
+
+POST /room/:id/chat 라우터를 새로 생성한다. 채팅을 데이터베이스에 저장한 후 io.of('/chat').to(방 아이디).emit으로 같은 방에 들어 있는 소켓들에게 메시지 데이터를 전송한다.
+
+이제 채팅을 할 수 있다. 채팅을 할 때마다 채팅 내용이 라우터로 전송되고 라우터에서 다시 웹 소켓으로 메시지를 보낸다.
+
+퇴장 시에는 chat.on('disconnect') 이벤트 리스너에서 다른 참여자에게 exit 이벤트를 호출한다.
+
+### 프로젝트 마무리
+GIF 이미지를 전송하는 것을 구현한다. 프론트 화면에서 이미지를 선택해 업로드하는 이벤트 리스너를 추가한다. 
+
+chat.html
+```js
+document.querySelector('#gif').addEventListener('change', function (e) {
+      console.log(e.target.files);
+      const formData = new FormData();
+      formData.append('gif', e.target.files[0]);
+      axios.post('/room/{{room._id}}/gif', formData)
+        .then(() => {
+          e.target.file = null;
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    });
+```
+
+POST /room/{{room._id}}/gif 주소에 상응하는 라우터를 작성한다.
+
+routes/index.js
+```js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const Room = require('../schemas/room');
+const Chat = require('../schemas/chat');
+
+const router = express.Router();
+
+router.get('/', async (req, res, next) => {
+  try {
+    const rooms = await Room.find({});
+    res.render('main', { rooms, title: 'GIF 채팅방' });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room', (req, res) => {
+  res.render('room', { title: 'GIF 채팅방 생성' });
+});
+
+router.post('/room', async (req, res, next) => {
+  try {
+    const newRoom = await Room.create({
+      title: req.body.title,
+      max: req.body.max,
+      owner: req.session.color,
+      password: req.body.password,
+    });
+    const io = req.app.get('io');
+    io.of('/room').emit('newRoom', newRoom);
+    res.redirect(`/room/${newRoom._id}?password=${req.body.password}`);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/room/:id', async (req, res, next) => {
+  try {
+    const room = await Room.findOne({ _id: req.params.id });
+    const io = req.app.get('io');
+    if (!room) {
+      return res.redirect('/?error=존재하지 않는 방입니다.');
+    }
+    if (room.password && room.password !== req.query.password) {
+      return res.redirect('/?error=비밀번호가 틀렸습니다.');
+    }
+    const { rooms } = io.of('/chat').adapter;
+    if (rooms && rooms[req.params.id] && room.max <= rooms[req.params.id].length) {
+      return res.redirect('/?error=허용 인원이 초과하였습니다.');
+    }
+    const chats = await Chat.find({ room: room._id }).sort('createdAt');
+    return res.render('chat', {
+      room,
+      title: room.title,
+      chats,
+      user: req.session.color,
+    });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+router.delete('/room/:id', async (req, res, next) => {
+  try {
+    await Room.remove({ _id: req.params.id });
+    await Chat.remove({ room: req.params.id });
+    res.send('ok');
+    setTimeout(() => {
+      req.app.get('io').of('/room').emit('removeRoom', req.params.id);
+    }, 2000);
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.post('/room/:id/chat', async (req, res, next) => {
+  try {
+    const chat = await Chat.create({
+      room: req.params.id,
+      user: req.session.color,
+      chat: req.body.chat,
+    });
+    req.app.get('io').of('/chat').to(req.params.id).emit('chat', chat);
+    res.send('ok');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+try {
+  fs.readdirSync('uploads');
+} catch (err) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, done) {
+      done(null, 'uploads/');
+    },
+    filename(req, file, done) {
+      const ext = path.extname(file.originalname);
+      done(null, path.basename(file.originalname, ext) + Date.now() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+router.post('/room/:id/gif', upload.single('gif'), async (req, res, next) => {
+  try {
+    const chat = await Chat.create({
+      room: req.params.id,
+      user: req.session.color,
+      gif: req.file.filename,
+    });
+    req.app.get('io').of('/chat').to(req.params.id).emit('chat', chat);
+    res.send('ok');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+module.exports = router;
+```
+
+에전에 했었던 이미지 업로드 방식과 같다. uploads 폴더에 사진을 저장하고, 파일명에 타임스탬프 를 붙이고, 용량을 제한했다. 파일이 업로드된 후에는 내용을 데이터베이스에 저장하고, 방 안에 있는 모든 소켓에 채팅 데이터를 보낸다. 
+
+이제 이미지를 제공할 uploads 폴더를 express.static 미들웨어로 연결한다.
+
+app.js
+```js
+app.use('/gif', express.static(path.join(__dirname, 'uploads')));
+```
+
+GIF 채팅방은 익명제라 사용자의 정보를 활용하기 어려우므로 기능에 다소 제약이 있다. 다음에 만들어볼 것은 실시간 경매 시스템으로 로그인한 사용자들 간에 실시간 데이터 교환 방법을 공부하겠다.
+
+##### 웹 소켓으로 실시간 데이터 교환 단원 끝
+
+## 실시간 경매 시스템 만들기
+(저자의 말) 이번 장과 다음 장에서는 지금까지 배운 것을 모두 활용하여 웹 서비스를 마든다. 따라서 개념을 새로 배우기보다는 기존에 배웠던 내용들을 응용하는 부분이 더 많은 것입니다.
+
+우선 이 장에서는 실시간 경매 시스템인 NodeAuction 앱을 만들어보겠습니다. 서버와 클라이언트, 데이터베이스가 주고 받는 요청과 응답, 세션, 데이터 흐름 등에 주목해주세요
+
+### 프로젝트 구조 갖추기
+프로젝트 이름은 NodeAuction이다. 먼저 node-auction 폴더를 만든 후에 init을 하던 package.json을 직접 작성하던 시작을 한다.
