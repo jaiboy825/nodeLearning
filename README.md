@@ -6815,3 +6815,1381 @@ GIF 채팅방은 익명제라 사용자의 정보를 활용하기 어려우므�
 
 ### 프로젝트 구조 갖추기
 프로젝트 이름은 NodeAuction이다. 먼저 node-auction 폴더를 만든 후에 init을 하던 package.json을 직접 작성하던 시작을 한다.
+
+models/user.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class User extends Sequelize.Model {
+    static init(sequelize) {
+        return super.init({
+            email : {
+                type : Sequelize.STRING(40),
+                allowNull : false,
+                unique : true
+            },
+            nick : {
+                type : Sequelize.STRING(15),
+                allowNull : false
+            },
+            password : {
+                type : Sequelize.STRING(100),
+                allowNull : true
+            },
+            money : {
+                type : Sequelize.INTEGER,
+                allowNull : false,
+                defaultValue: 0
+            }
+        }, {
+            sequelize,
+            timestamps : true,
+            paranoid: true,
+            modelName: 'User',
+            tableName : 'users',
+            charset : 'utf8',
+            collate : 'utf8_general_ci'
+        });
+    }
+
+    static associate(db) {
+        db.User.hasMany(db.Auction);
+    }
+}
+```
+사용자 모델은 이메일, 닉네임, 비밀번호, 보유 자금으로 구서오딘다.
+
+사용자가 입찰을 여러 번 할 수 있으므로 사용자 모델과 경매 모델도 일대다 관계이다.
+
+models/good.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class Good extends Sequelize.Model {
+    static init(sequelize) {
+        return super.init({
+            name: {
+                type : Sequelize.STRING(40),
+                allowNull: false
+            },
+            img : {
+                type : Sequelize.STRING(200),
+                allowNull : true
+            },
+            price : {
+                type : Sequelize.INTEGER,
+                allowNull : false,
+                defaultValue : 0
+            }
+        }, {
+            sequelize,
+            timestamps : true,
+            paranoid: true,
+            modelName: 'Good',
+            tableName : 'goods',
+            charset : 'utf8',
+            collate : 'utf8_general_ci'
+        });
+    }
+
+    static associate(db) {
+        db.Good.belongsTo(db.User, {as : 'Owner'});
+        db.Good.belongsTo(db.User, {as : 'Sold'});
+        db.Good.hasMany(db.Auction);
+    }
+}
+```
+상품 모델은 상품명, 상품사진, 시작 가격으로 구성된다.
+
+사용자 모델과 상품 모델 간에는 일대다 관계가 두 번 적용된다. 사용자가 여러 상품을 등록할 수 있고, 사용자가 여러 상품을 낙찰받을 수 있기 때문이다. 등록한 상품과 낙찰받은 상품, 두 관계를 구별하기 위해 as 속성에 각각 Owner, Sold로 관계명을 적었다. 각각 OwnerId, SoldId 컬럼으로 상품 모델에 추가된다. 한 상품에 여러 명이 입찰하므로 상품 모델과 경매 모델도 일대다 관계이다.
+
+models/auction.js
+```js
+const Sequelize = require('sequelize');
+
+module.exports = class Auction extends Sequelize.Model {
+    static init(sequelize) {
+        return super.init({
+           bid :{
+               type: Sequelize.INTEGER,
+               allowNull : false,
+               defaultValue : 0
+           },
+           msg : {
+               type : Sequelize.STRING(100),
+               allowNull : true
+           }
+        }, {
+            sequelize,
+            timestamps : true,
+            paranoid : true,
+            modelName : 'Auction',
+            tableName: 'auctions',
+            charset : 'utf8',
+            collate : 'utf8_general_ci'
+        });
+    }
+
+    static associate(db) {
+        db.Auction.belongsTo(db.User);
+        db.Auction.belongsTo(db.Good);
+    }
+}
+```
+마지막으로 경매 모델은 입찰가와 입찰 시 메시지로 구성된다. 입찰 시 메시지는 null이어도 된다. 경매 모델은 사용자 모델 및 상품 모델과 일대다 관계에 있다. 경매 모델에는 UserId 컬럼과 GoodId 컬럼이 생성된다.
+
+모델을 생성한 후에 모델을 데이터베이스 및 서버와 연결한다. nodeauction 데이터베이스를 생성해야 하므로 config.json을 데이터베이스에 맞게 수정한다. npx 명령어로 데이터베이스를 생성한다.
+
+models/index.js
+```js
+const Sequelize = require('sequelize');
+const User = require('./user');
+const Good = require('./good');
+const Auction = require('./auction');
+
+const env = process.env.NODE_ENV || 'development';
+const config = require(__dirname + '/../config/config.json')[env];
+const db = {};
+
+const sequelize = new Sequelize(
+  config.database, config.username, config.password, config
+);
+
+db.sequelize = sequelize;
+db.User = User;
+db.Good = Good;
+db.Auction = Auction;
+
+User.init(sequelize);
+Good.init(sequelize);
+Auction.init(sequelize);
+
+User.associate(db);
+Good.associate(db);
+Auction.associate(db);
+
+module.exports = db;
+```
+이제 로그인을 위한 패스포트 설정이 필요하다. 이번에는 단순히 passport-local만 사용하겠다.
+
+passport/localStrategy.js
+```js
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const bcrypt = require('bcrypt');
+const User = require('../models/user');
+
+module.exports = () => {
+    passport.use(new LocalStrategy({
+        usernameField : 'email',
+        passportField : 'password'
+    }, async (email, password, done) => {
+        try {
+            const exUser = await User.findOne({where : {email}});
+            if (exUser) {
+                const result = await bcrypt.compare(password, exUser.password);
+                if (result) {
+                    done(null, exUser);
+                }else {
+                    done(null, false, {message : '비밀번호가 일치하지 않습니다.'});
+                }
+            }else {
+                done(null, false, {message : '가입되지 않은 회원입니다.'});
+            }
+        } catch (error) {
+            console.error(error);
+            done(error);
+        }
+    }));
+}
+```
+
+passport/index.js
+```js
+const passport = require('passport');
+
+const local = require('./localStrategy');
+const User = require('../models/user');
+
+module.exports = () => {
+    passport.serializeUser((user, done) => {
+        done(null, user.id);
+    });
+
+    passport.deserializeUser((id, done) => {
+        User.findOne({where : {id}})
+            .then(user => done(null, user))
+            .catch(err => done(err));
+    });
+    local();
+}
+```
+로그인을 위한 라우터와 미들웨어도 추가한다.
+
+routes/auth.js
+```js
+const express = require('express');
+const passport = require('passport');
+const bcrypt = require('bcrypt');
+
+const { isLoggedIn, isNotLoggedIn } = require('./middlewares');
+const User = require('../models/user');
+
+const router = express.Router();
+
+router.post('/join', isNotLoggedIn, async (req, res, next) => {
+  const { email, nick, password, money } = req.body;
+  try {
+    const exUser = await User.findOne({ where: { email } });
+    if (exUser) {
+      return res.redirect('/join?joinError=이미 가입된 이메일입니다.');
+    }
+    const hash = await bcrypt.hash(password, 12);
+    await User.create({
+      email,
+      nick,
+      password: hash,
+      money,
+    });
+    return res.redirect('/');
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+router.post('/login', isNotLoggedIn, (req, res, next) => {
+  passport.authenticate('local', (authError, user, info) => {
+    if (authError) {
+      console.error(authError);
+      return next(authError);
+    }
+    if (!user) {
+      return res.redirect(`/?loginError=${info.message}`);
+    }
+    return req.login(user, (loginError) => {
+      if (loginError) {
+        console.error(loginError);
+        return next(loginError);
+      }
+      return res.redirect('/');
+    });
+  })(req, res, next);
+});
+
+router.get('/logout', isLoggedIn, (req, res) => {
+  req.logout();
+  req.session.destroy();
+  res.redirect('/');
+});
+
+module.exports = router;
+```
+
+routes/middlewares.js
+```js
+exports.isLoggedIn = (req, res, next) => {
+    if (req.isAuthenticated()) {
+        next();
+    } else {
+        res.redirect('/?loginError=로그인이 필요합니다.');
+    }
+}
+
+exports.isNotLoggedIn = (req, res, next) => {
+    if(!req.isAuthenticated()) {
+        next();
+    } else {
+        res.redirect('/');
+    }
+}
+```
+
+마지막으로 .env파일과 서버 코드를 작성한다. 시퀄라이즈와 패스포트를 모두 서버에 연결한다.
+
+app.js
+```js
+const express = require('express');
+const path = require('path');
+const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const passport = require('passport');
+const nunjucks = require('nunjucks');
+const dotenv = require('dotenv');
+
+dotenv.config();
+const indexRouter = require('./routes/index');
+const authRouter = require('./routes/auth');
+const { sequelize } = require('./models');
+const passportConfig = require('./passport');
+
+const app = express();
+passportConfig();
+app.set('port', process.env.PORT || 8010);
+app.set('view engine', 'html');
+nunjucks.configure('views', {
+  express: app,
+  watch: true,
+});
+sequelize.sync({ force: false })
+  .then(() => {
+    console.log('데이터베이스 연결 성공');
+  })
+  .catch((err) => {
+    console.error(err);
+  });
+
+const sessionMiddleware = session({
+  resave: false,
+  saveUninitialized: false,
+  secret: process.env.COOKIE_SECRET,
+  cookie: {
+    httpOnly: true,
+    secure: false,
+  },
+});
+
+app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/img', express.static(path.join(__dirname, 'uploads')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser(process.env.COOKIE_SECRET));
+app.use(sessionMiddleware);
+app.use(passport.initialize());
+app.use(passport.session());
+
+app.use('/', indexRouter);
+app.use('/auth', authRouter);
+
+app.use((req, res, next) => {
+  const error =  new Error(`${req.method} ${req.url} 라우터가 없습니다.`);
+  error.status = 404;
+  next(error);
+});
+
+app.use((err, req, res, next) => {
+  res.locals.message = err.message;
+  res.locals.error = process.env.NODE_ENV !== 'production' ? err : {};
+  res.status(err.status || 500);
+  res.render('error');
+});
+
+app.listen(app.get('port'), () => {
+  console.log(app.get('port'), '번 포트에서 대기중');
+});
+```
+
+경매 시스템은 회원가입, 로그인 경매 상품 등록, 방 참여, 경매 진행으로 이루어져 있다. 회원가입, 로그인, 경매 상품 등록 페이지와 라우터를 만든다.
+
+그리고 화면을 담당하는 html 파일들을 작성한다. (코드는 생략하겠다.)
+
+마지막으로 라우터를 만든다
+
+routes/index.js
+```js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const {Good, Auction, User} = require('../models');
+const { isLoggedIn } = require('./middlewares');
+const {isLoggedIn, isNotLoggedIn} = require('./middlewares');
+
+const router = express.Router();
+
+router.use((req, res, next) => {
+    res.locals.user = req.user;
+    next();
+});
+
+router.get('/', async (req, res, next) => {
+    try {
+        const goods = await Good.findAll({where : {SoldId: null}});
+        res.render('main', {
+            title : 'NodeAuction',
+            goods
+        });
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+});
+
+router.get('/join', isNotLoggedIn, (req, res) => {
+    res.render('join', {
+      title: '회원가입 - NodeAuction',
+    });
+  });
+  
+  router.get('/good', isLoggedIn, (req, res) => {
+    res.render('good', { title: '상품 등록 - NodeAuction' });
+  });
+  
+  try {
+    fs.readdirSync('uploads');
+  } catch (error) {
+    console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+    fs.mkdirSync('uploads');
+  }
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination(req, file, cb) {
+        cb(null, 'uploads/');
+      },
+      filename(req, file, cb) {
+        const ext = path.extname(file.originalname);
+        cb(null, path.basename(file.originalname, ext) + new Date().valueOf() + ext);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
+  router.post('/good', isLoggedIn, upload.single('img'), async (req, res, next) => {
+    try {
+      const { name, price } = req.body;
+      await Good.create({
+        OwnerId: req.user.id,
+        name,
+        img: req.file.filename,
+        price,
+      });
+      res.redirect('/');
+    } catch (error) {
+      console.error(error);
+      next(error);
+    }
+  });
+  
+  module.exports = router;
+```
+
+router.use 에서 req.locals.user = req.user; 로 모든 pug 템플릿에 사용자 정보를 변수로 집어 넣었다. 이렇게 하면 res.render 메서드에 user: req.user 를 하지 않아도 되므로 중복을 제거할 수 있다.
+
+라우터는 GET /, GET /join, GET /good, POST /good으로 이루어져 있다. GET /는 메인 화면을 렌저링 한다. 렌더링할 때 경매가 진행 중인 상품 목록도 같이 불러온다 SoldId가 낙찰자의 아이디이므로 낙찰자가 null 이면 경매작 진행 중인 것 이다.
+
+GET /join 과 GET /good은 각각 회원가입 화면과 상품 등록 화면을 렌더링한다. POST /good 라우터는 업로드 상품을 처리한다. 상품 이미지 업로드 기능이 있어 multer 미들웨어가 붙었다.
+
+### 서버센트 이벤트 사용하기
+
+경매는 시간이 생명이다. 특히 온라인 경매이므로 모든 사람이 같은 시간에 경매가 종료되어야 한다. 따라서 모든 사람에게 같은 시간이 표시되어야 한다. 하지만 클라이언트의 시간은 믿을 수 없다. 너무나도 손쉽게 시간을 변경할 수 있기 때문이다. 따라서 서버 시간을 받아오는 것이 좋다.
+
+폴링이나 웹 소켓을 통해 서버 시간을 받아올 수도 있지만, 이번에는 서버센트 이벤트를 사용해 시간을 받아올 것이다. 주기적으로 서버 시간을 조회하는 데 양방향 통신이 필요하지 않기 때문이다.
+
+웹 소켓도 사용한다. 웹 소켓은 경매를 진행하는 동안에 다른 사람이 참여하거나 입찰했을 때 모두에게 금액을 알리는 역할을 할 것이다. 서버센트 이벤트와 웹 소켓은 같이 사용할 수 있다. SSE 패키지와 SOCKET.IO 패키지를 설치한다.
+
+npm i sse socket.io@2
+
+모듈을 연결하고 sse.js를 작성한다.
+
+sse.js
+```js
+const SSE = require('sse');
+
+module.exports = (server) => {
+    const sse = new SSE(server);
+    sse.on('connection', (client) => {
+        setInterval(() => {
+            client.send(Date.now().toString());
+        }, 1000);
+    })
+}
+```
+
+sse 모듈을 불러와 new SSE 로 서버 객체를 생성하면 된다. 생성한 객체에는 connection 이벤트 리스너를 연결하여 클라이언트와 연결할 때 어떤 동작을 할지 정의할 수 있다. 매개변수로 client 객체를 쓸 수 있다. 클라이언트에 메시지를 보낼 때 이 객체를 사용한다. 라우터에서 SSE를 사용하고 싶다면 app.set 메서드로 client 객체를 등록하고, req.app.get 메서드로 가져오면 된다. 
+
+이 예제에서는 1초마다 접속한 클라이언트에 서버 시간 타임스탬프를 보내도록 했다. 
+client.send 메서드로 보낼 수 있다. 단, 문자열만 보낼 수 있으므로 숫자인 타임스탬프를 toString 메서드를 사용하여 문자열로 변경했다.
+
+socket.js
+```js
+const SocketIO = require('socket.io');
+
+module.exports = (server, app) => {
+  const io = SocketIO(server, { path: '/socket.io' });
+  app.set('io', io);
+  io.on('connection', (socket) => { // 웹 소켓 연결 시
+    const req = socket.request;
+    const { headers: { referer } } = req;
+    const roomId = referer.split('/')[referer.split('/').length - 1];
+    socket.join(roomId);
+    socket.on('disconnect', () => {
+      socket.leave(roomId);
+    });
+  });
+};
+```
+
+Socket.IO와도 연결했다. 이번에는 사용자 정의 네임스페이스를 쓰지 않고 기본 네임스페이스로 연결했다. 경매 화면에서 실시간으로 입찰 정보를 올리기 위해 웹 소켓을 사용한다. 클라이언트 연결 시 주소로부터 경매방 아이디를 받아와 socket.join으로 해당 방에 입장한다. 연결이 끊겼다면 socket.leave로 해당 방에서 나간다.
+
+서버센트 이벤트는 한 가지 단점이 있다. IE나 엣지 브라우저에서 사용할 수 없다는 것이다. EventSource라는 객체를 지원하지 않기 때문인데, 다행히 EventSource를 사용자가 직접 구현할 수 있다. IE나 엣지 브라우저를 위해 클라이언트 코드에 EventSource 폴리필을 넣었다.
+
+main.html
+```html
+{% extends 'layout.html' %}
+
+{% block content %}
+  <div class="timeline">
+    <h2>경매 진행 목록</h2>
+    <table id="good-list">
+      <tr>
+        <th>상품명</th>
+        <th>이미지</th>
+        <th>시작 가격</th>
+        <th>종료 시간</th>
+        <th>입장</th>
+      </tr>
+      {% for good in goods %}
+        <tr>
+          <td>{{good.name}}</td>
+          <td>
+            <img src="/img/{{good.img}}">
+          </td>
+          <td>{{good.price}}</td>
+          <td class="time" data-start="{{good.createdAt}}">00:00:00</td>
+          <td>
+            <a href="/good/{{good.id}}" class="enter btn">입장</a>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <script src="https://unpkg.com/event-source-polyfill/src/eventsource.min.js"></script>
+  <script>
+    const es = new EventSource('/sse');
+    es.onmessage = function (e) {
+      document.querySelectorAll('.time').forEach((td) => {
+        const end = new Date(td.dataset.start); // 경매 시작 시간
+        const server = new Date(parseInt(e.data, 10));
+        end.setDate(end.getDate() + 1); // 경매 종료 시간
+        if (server >= end) { // 경매가 종료되었으면
+          return td.textContent = '00:00:00';
+        } else {
+          const t = end - server; // 경매 종료까지 남은 시간
+          const seconds = ('0' + Math.floor((t / 1000) % 60)).slice(-2);
+          const minutes = ('0' + Math.floor((t / 1000 / 60) % 60)).slice(-2);
+          const hours = ('0' + Math.floor((t / (1000 * 60 * 60)) % 24)).slice(-2);
+          return td.textContent = hours + ':' + minutes + ':' + seconds ;
+        }
+      });
+    };
+  </script>
+{% endblock %}
+```
+첫 번째 스크립트가 EvenSource 폴리필이다. 이것을 넣으면 IE와 엣지 브라우저에서도 서버센트 이벤트를 사용할 수 있다. 두 번쨰 스크립트는 EventSource를 사용해 서버센트 이벤트를 받는 코드이다.new EventSource로 서버와 연결하고 es.onmessage 또는 es.addEventListener('message') 이벤트 리스너로 서버로부터 데이터를 받을 수 있다. 서버로부터 받은 데이터는 e.data에 들어 있다. 아랫부분은 서버 시간과 경매 종료 시간을 계산해 카운트다운하는 코드이다. 24시간 동안 카운트다운되도록 했다.
+
+실행을 해서 network 탭을 확인해보면 eventsource.min.js는 조금 전에 추가한 EventSource 폴리필 파일이다. GET /sse가 바로 서버센트 이벤트에 접속한 것이다. Type이 eventsource로 나와 있다. 일반 HTTP 연결을 통해 서버센트 이벤트를 사용할 수 있다.
+
+GET /sse를 클릭해보면 EventStream 탭이 있는데 여기서 매 초마다 서버로부터 타임스탬프 데이터가 오는 것을 확인할 수 있다.
+
+auction.html을 작성한다.
+
+스크립트 코드가 상당히 길지만 별 내용은 없다. 먼저 axios, EventSource 폴리필과 Socket.IO 클라이언트 스크립트를 넣었다. 네 번째 스크립트 태그는 입찰 시 POST /good/:id/bid로 요청을 보내는것, 서버센트 이벤트 데이터로 서버 시간을 받아 카운트다운하는 것, 다른 사람이 입찰했을 때 Socket.IO로 입찰 정보를 렌더링하는 것으로 이루어져 있다.
+
+라우터에 GET /good/:id와 POST /good/:id/bid를 추가한다.
+
+routes/index.js
+```js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const { Good, Auction, User } = require('../models');
+const { isLoggedIn, isNotLoggedIn } = require('./middlewares');
+
+const router = express.Router();
+
+router.use((req, res, next) => {
+  res.locals.user = req.user;
+  next();
+});
+
+router.get('/', async (req, res, next) => {
+  try {
+    const goods = await Good.findAll({ where: { SoldId: null } });
+    res.render('main', {
+      title: 'NodeAuction',
+      goods,
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/join', isNotLoggedIn, (req, res) => {
+  res.render('join', {
+    title: '회원가입 - NodeAuction',
+  });
+});
+
+router.get('/good', isLoggedIn, (req, res) => {
+  res.render('good', { title: '상품 등록 - NodeAuction' });
+});
+
+try {
+  fs.readdirSync('uploads');
+} catch (error) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      cb(null, 'uploads/');
+    },
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname);
+      cb(null, path.basename(file.originalname, ext) + new Date().valueOf() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+router.post('/good', isLoggedIn, upload.single('img'), async (req, res, next) => {
+  try {
+    const { name, price } = req.body;
+    await Good.create({
+      OwnerId: req.user.id,
+      name,
+      img: req.file.filename,
+      price,
+    });
+    res.redirect('/');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/good/:id', isLoggedIn, async (req, res, next) => {
+  try {
+    const [good, auction] = await Promise.all([
+      Good.findOne({
+        where: { id: req.params.id },
+        include: {
+          model: User,
+          as: 'Owner',
+        },
+      }),
+      Auction.findAll({
+        where: { GoodId: req.params.id },
+        include: { model: User },
+        order: [['bid', 'ASC']],
+      }),
+    ]);
+    res.render('auction', {
+      title: `${good.name} - NodeAuction`,
+      good,
+      auction,
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.post('/good/:id/bid', isLoggedIn, async (req, res, next) => {
+  try {
+    const { bid, msg } = req.body;
+    const good = await Good.findOne({
+      where: { id: req.params.id },
+      include: { model: Auction },
+      order: [[{ model: Auction }, 'bid', 'DESC']],
+    });
+    if (good.price >= bid) {
+      return res.status(403).send('시작 가격보다 높게 입찰해야 합니다.');
+    }
+    if (new Date(good.createdAt).valueOf() + (24 * 60 * 60 * 1000) < new Date()) {
+      return res.status(403).send('경매가 이미 종료되었습니다');
+    }
+    if (good.Auctions[0] && good.Auctions[0].bid >= bid) {
+      return res.status(403).send('이전 입찰가보다 높아야 합니다');
+    }
+    const result = await Auction.create({
+      bid,
+      msg,
+      UserId: req.user.id,
+      GoodId: req.params.id,
+    });
+    // 실시간으로 입찰 내역 전송
+    req.app.get('io').to(req.params.id).emit('bid', {
+      bid: result.bid,
+      msg: result.msg,
+      nick: req.user.nick,
+    });
+    return res.send('ok');
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+module.exports = router;
+```
+
+GET /good/:id 라우터는 해당 상품과 기존 입찰 정보들을 불러온 뒤 렌더링한다. 상품 모델에 사용자 모델을 include할 때 as 속성을 사용한 것에 주의해야한다. Good 모델과 User 모델은 현재 일대다 관계가 두 번 연결되어 있으므로 이런 경우에는 어떤 관계를 include할지 as 속성으로 밝혀야 한다.
+
+POST /good/:id/bid는 클라이언트로부터 받은 입찰 정보를 저장한다. 만약 시작 가격보다 낮게 입찰했거나, 경매 종료 시간이 지났거나 이전 입찰가보다 낮은 입찰가가 들어왔다면 반려한다. 정상적인 입찰가가 들어왔다면 저장한 후 해당 경매방의 모든 사람에게 입찰자, 입찰 가격, 입찰 메시지 등을 웹 소켓으로 전달한다. Good.findOne 메서드의 order 속성을 보면 include 될 모델의 컬럼을 정렬하는 방법이다. Auction 모델의 bid를 내림차순으로 정렬하고 있다. 
+
+### 스케줄링 구현하기
+카운트다운이 끝나면 더 이상 경매를 진행할 수는 없지만, 아직 낙찰자가 정해지지 않았다. 
+경매 종료를 24시간 후로 정했으므로 경매가 생성되고 24시간이 지난 후에 낙찰자를 정하는 시스템을 구현해야 한다. 이럴 때 node-schedule 모듈을 사용한다.
+
+routes/index.js
+```js
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const schedule = require('node-schedule');
+
+const { Good, Auction, User } = require('../models');
+const { isLoggedIn, isNotLoggedIn } = require('./middlewares');
+
+const router = express.Router();
+
+router.use((req, res, next) => {
+  res.locals.user = req.user;
+  next();
+});
+
+router.get('/', async (req, res, next) => {
+  try {
+    const goods = await Good.findAll({ where: { SoldId: null } });
+    res.render('main', {
+      title: 'NodeAuction',
+      goods,
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/join', isNotLoggedIn, (req, res) => {
+  res.render('join', {
+    title: '회원가입 - NodeAuction',
+  });
+});
+
+router.get('/good', isLoggedIn, (req, res) => {
+  res.render('good', { title: '상품 등록 - NodeAuction' });
+});
+
+try {
+  fs.readdirSync('uploads');
+} catch (error) {
+  console.error('uploads 폴더가 없어 uploads 폴더를 생성합니다.');
+  fs.mkdirSync('uploads');
+}
+const upload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      cb(null, 'uploads/');
+    },
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname);
+      cb(null, path.basename(file.originalname, ext) + new Date().valueOf() + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+router.post('/good', isLoggedIn, upload.single('img'), async (req, res, next) => {
+  try {
+    const { name, price } = req.body;
+    const good = await Good.create({
+      OwnerId: req.user.id,
+      name,
+      img: req.file.filename,
+      price,
+    });
+    const end = new Date();
+    end.setDate(end.getDate() + 1); // 하루 뒤
+    schedule.scheduleJob(end, async () => {
+      const success = await Auction.findOne({
+        where: { GoodId: good.id },
+        order: [['bid', 'DESC']],
+      });
+      await Good.update({ SoldId: success.UserId }, { where: { id: good.id } });
+      await User.update({
+        money: sequelize.literal(`money - ${success.bid}`),
+      }, {
+        where: { id: success.UserId },
+      });
+    });
+    res.redirect('/');
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/good/:id', isLoggedIn, async (req, res, next) => {
+  try {
+    const [good, auction] = await Promise.all([
+      Good.findOne({
+        where: { id: req.params.id },
+        include: {
+          model: User,
+          as: 'Owner',
+        },
+      }),
+      Auction.findAll({
+        where: { goodId: req.params.id },
+        include: { model: User },
+        order: [['bid', 'ASC']],
+      }),
+    ]);
+    res.render('auction', {
+      title: `${good.name} - NodeAuction`,
+      good,
+      auction,
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.post('/good/:id/bid', isLoggedIn, async (req, res, next) => {
+  try {
+    const { bid, msg } = req.body;
+    const good = await Good.findOne({
+      where: { id: req.params.id },
+      include: { model: Auction },
+      order: [[{ model: Auction }, 'bid', 'DESC']],
+    });
+    if (good.price >= bid) {
+      return res.status(403).send('시작 가격보다 높게 입찰해야 합니다.');
+    }
+    if (new Date(good.createdAt).valueOf() + (24 * 60 * 60 * 1000) < new Date()) {
+      return res.status(403).send('경매가 이미 종료되었습니다');
+    }
+    if (good.Auctions[0] && good.Auctions[0].bid >= bid) {
+      return res.status(403).send('이전 입찰가보다 높아야 합니다');
+    }
+    const result = await Auction.create({
+      bid,
+      msg,
+      UserId: req.user.id,
+      GoodId: req.params.id,
+    });
+    // 실시간으로 입찰 내역 전송
+    req.app.get('io').to(req.params.id).emit('bid', {
+      bid: result.bid,
+      msg: result.msg,
+      nick: req.user.nick,
+    });
+    return res.send('ok');
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+});
+
+module.exports = router;
+```
+
+schedule 객체의 scheduleJob 메서드로 일정을 예약할 수 있다. 첫 번째 인수로 실행될 시각을 넣고, 두 번째 인수로 해당 시각이 되었을 때 수행할 콜백 함수를 넣는다. 경매 모델에서 가장 높은 가격으로 입찰한 사람을 찾아 상품 모델의 낙찰자 아이디에 넣어주도록 정의했다. 또한, 낙찰자의 보유 자산을 낙찰 금액만큼 뺀다. 
+
+node-schedule 패키지의 단점은 스케줄링이 노드 기반으로 작동하므로 노드가 종료되면 스케줄 예약도 같이 종료된다는 점이다. 노드를 계속 켜두면 되지만, 서버가 어떤 에러로 인해 종료 될지 예측하기는 매우 어렵다. 따라서 이를 보완하기 위한 방법이 필요하다. 서버가 시작될 때 경매 시작 후 24시간이 지났지만 낙찰자가 없는 경매를 찾아서 낙찰자를 지정하는 코드를 추가하겠다.
+
+checkAuction.js
+```js
+const { Op } = require('Sequelize');
+
+const { Good, Auction, User, sequelize } = require('./models');
+
+module.exports = async () => {
+    try {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const targets = await Good.findOne({
+            where : {
+                SoldId : null,
+                createdAt : {[Op.lte]: yesterday}
+            }
+        });
+        targets.forEach(async (target) => {
+            const success = await Auction.findOne({
+                where : { GoodId : target.id},
+                order : [['bid', 'DESC']]
+            });
+            await Good.update({ SoldId : success.UserId}, {where : {id : target.id}});
+            await User.update({
+                money : sequelize.literal(`money - ${success.bid}`)
+            }, {
+                where : {id : success.UserId}
+            });
+        });
+    } catch (error) {
+        console.error(error);
+    }
+}
+```
+낙찰자가 없으면서 생성된 지 24시간이 지난 경매를 찾아 낙찰자를 정한다.
+
+app.js
+```js
+const checkAuction = require('./checkAuction');
+
+checkAuction();
+```
+checkAuntion을 서버에 연결한다. 서버를 재시작하면 앞으로 서버를 시작할 때마다 낙찰자를 지정하는 작업을 수행한다. checkAuntion의 코드는 app.js에 직접 작성해도 되지만 코드가 길어지므로 분리했다.
+
+하루가 지나 경매가 마무리되면 node-schedule 모듈이 예정된 스케줄에 따라 낙찰자를 지정한다. 단, 서버가 계속 켜져 있어야 한다. 서버가 중간에 꺼졌다면 다시 켤 때 checkAuction.js 코드에 따라 낙찰자를 선정하게 된다.
+
+### 프로젝트 마무리하기
+이렇게 경매 시스템을 제작하였다. 마지막으로 낙찰자가 낙찰 내역을 볼 수 있도록 해보자
+
+routes/index.js
+```js
+router.get('/list', isLoggedIn, async (req, res, next) => {
+    try {
+        const goods = await Good.findAll({
+            where : {SoldId: req.user.id},
+            include : { model: Auction },
+            order : [[{model : Auction}, 'bid', 'DESC']]
+        });
+        res.render('list', {title : '낙찰 목록 - NodeAuction', goods});
+    } catch (error) {
+        console.error(error);
+        next(error);
+    }
+});
+```
+낙찰된 상품과 그 상품의 입찰 내역을 조회한 후 렌더링한다. 입찰 내역은 내림차순으로 정렬하여 낙찰자의 내역이 가장 위에 오도록 했다.
+
+낙찰 목록 화면인 list.html과 그 화면으로 넘어갈 버튼을 만든다.
+
+낙찰자의 계정으로 로그인하면 낙찰된 목록을 확인할 수 있다.
+
+##### 경매 시스템 끝 
+
+<hr>
+
+## CLI 프로그램 만들기
+(저자의 말) 이 장에서는 npm, nodemon이나 sequelize-cli와 같이 명령줄 인터페이스 기반으로 동작하는 노드 프로그램을 만들어봅니다.
+
+CLI는 콘솔 창을 통해 프로그램을 수행하는 환경을 뜻합니다. 이와 반대되는 개념으로는 그래픽 사용자 인터페이스 즉 GUI가 있습니다. 리눅스의 셸이나 브라우저의 콘솔, 명령 프롬프트 등이 대표적인 CLI 방식 소프트웨어고, 윈도우나 맥 운영체제, 웹 애플리케이션 등이 대표적인 GUI 방식 소프트웨어입니다.
+
+개발자에게는 GUI 프로그램보다 CLI 프로그램이 더 효율적일 수 있습니다. GUI를 만드는 데 상당한 시간이 소요되기 때문입니다. GUI가 없어도 되는 간단한 개발용 프로그램이 필요하다면, 노드를 통해 CLI 프로그램을 만들어 시간을 아낄 수 있습니다.
+
+### 간단한 콘솔 명령어 만들기
+지금까지 노드 파일을 실행할 때는 node 파일명 명령어를 콘솔에 입력했다. node나 npm nodemon처럼 콘솔에서 입력하여 어떠한 동작을 수행하는 문장을 콘솔 명령어라고 부른다. 
+
+node와 npm 명령어는 노드를 설치해야만 사용할 수 있지만, nodemon, rimraf와 같은 명령어는 해당 패키지를 npm을 통해 전역 설치하면 콘솔에서 명령어로 사용할 수 있었다. 이러한 명령어를 만드는 것이 이번 단원의 목표이다.
+
+명령어로 만들고 싶은 패키지가 다른 사람의 소유더라도 걱정할 필요가 없다. rimraf와 nodemon은 패키지명과 콘솔 명령어가 동일하지만, sequelize-cli는 명령어가 sequelize로 패키지명과 다르다. 이렇게 패키지명과 콘솔 명령어를 다르게 만들 수 있으니 걱정하지 않아도 된다.
+
+먼저 node-cli 폴더를 만들고 그 안에 package.json과 간단한 index.js를 생성한다.
+
+index.js
+```js
+#!/usr/bin/env node
+console.log('Hello CLI');
+```
+
+index.js는 단순히 Hello CLI라는 문자열을 콘솔에 출력하는 파일이지만, 첫 줄의 주석이 눈에 띌 것이다. 그 위의 문장인데 주석이라 의미 없다고 생각할 수도 있지만, 리눅스나 맥에서는 의미가 있다. /usr/bin/env에 등록된 node 명령어로 파일을 실행하라는 뜻이다. 윈도우에서는 주석으로 취급한다.
+
+이제 이 파일을 cli 프로그램으로 만든다. 
+package.json 
+```json
+{
+  "name": "node-cli",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "author": "jai",
+  "license": "ISC",
+  "bin" : {
+    "cli" : "./index.js"
+  }
+}
+
+```
+bin 속성이 콘솔 명령어와 해당 명령어를 호출할 때 실행 파일을 설정하는 객체이다. 콘솔 명령어는 cli로, 실행 파일은 방금 생성한 index.js로 지정했다.
+
+콘솔에서 현재 패키지를 전역 설치한다. 보통 전역 설치할 때는 명령어에 패키지명을 함께 적어주지만, 현재 패키지를 전역 설치할 떄는 적지 않는다.
+
+```
+npm i -g
+```
+
+맥이나 리눅스에서는 명령어 앞에 sudo를 붙여야 할 수도 있다. 현재 패키지의 dependencies로 설치한 것이 아니므로 Node_modules 폴더가 생기지 않는다. 이제 콘솔에 cli를 입력하면 index.js가 실행된다.
+
+전역 패키지이므로 npx 명령어를 사용해 npx cli로도 실행할 수 있다. 정상 작동한다면 기능을 붙여나가면 된다.
+
+process.argv로 명령어에 어떤 옵션이 주어졌는지 확인할 수 있다. 옵션 목록이 배열로 표시된다.
+
+cli 프로그램 코드가 바뀌었으니 다시 전역 설치해야 하는것은 아닐까 생각을 할 수 있지만, 코드가 업데이트될 때마다 다시 설치할 필요는 없다. package.json의 bin 속성에 cli 명령어와 index.js를 연결해두었으므로 cli 명령어가 호출될 때마다 index.js 파일이 실행된다. index.js의 내용을 캐싱하는 것이 아니고, 호출 시마다 새로 읽어들이므로 항상 업데이트 내용이 반영된다.
+
+전역 설치 후 cli 명령어 뒤에 옵션을 붙여 호출했더니 요소가 옵션 갯수 + 2개가 들어 있는 배열이 출력되었다. 처음 두 개는 node와 cli 명령어의 경로이다. 운영체제 별로 경로가 다를 수 있다. 
+
+이번에는 사용자로부터 입력을 받는다. 노드의 내장 모듈인 readline을 사용한다. readline은 cli 프로그램을 만들 때를 제외하면 거의 사용되지 않는다.
+
+index.js
+```js
+#!/usr/bin/env node
+const readline = require('readline');
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+rl.question('노드가 재미있습니까 ? (y/n)', (answer) => {
+    if (answer === 'y') {
+        console.log('재밌군요!');
+    }else if (answer === 'n'){
+        console.log('재미없군요!');
+    }else {
+        console.log('y 또는 n만 입력하세요');
+    }
+    rl.close();
+});
+```
+
+readline 모듈을 불러와서 createInterface 메서드로 rl 객체를 생성한다. 인수로 설정 객체를 제공했는데, input 속성에는 process.stdin을, output 속성에는 process.stdout을 넣었다.
+
+process.stdin과 process.stdout은 각각 콘솔 입력과 출력을 담당하는 스트림이다. readline 모듈은 이들을 사용해서 사용자로부터 입력을 받고, 그에 따른 결과를 출력한다.
+
+rl 객체의 question 메서드의 첫 번째 인수가 질문 내용이다. 두 번째로 인수로 받는 콜백 함수는 매개변수로 답변을 가지고 있다. 입출력 과정이 다 끝나면 close 메서드로 question 메서드를 종료한다.
+
+프로그램이 종료되는 대신 기존 콘솔 내용을 모두 지우고 다시 입력받게 하고 싶을 수도 있을 텐데 이때는 console.clear 메서드를 호출하면 된다.
+
+index.js
+```js
+#!/usr/bin/env node
+const readline = require('readline');
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+console.clear();
+const answerCallback = (answer) => {
+    if (answer === 'y') {
+        console.log('재밌군요!');
+        rl.close();
+    }else if (answer === 'n'){
+        console.log('재미없군요!');
+        rl.close();
+    }else {
+        console.clear();
+        console.log('y 또는 n만 입력하세요.');
+        rl.question('노드가 재미있습니까 ? (y/n)', answerCallback);
+    }
+}
+
+rl.question('노드가 재미있습니까 ? (y/n)', answerCallback);
+```
+이렇게 하면 정해진 답이 아닐 경우에 다시 실행하고 정해진 답을 입력받게 되면 종료된다.
+
+이번에는 cli 프로그램 명령어를 입력하면 기본적인 html 또는 익스프레스 라우터 파일 템플릿을 만들어주는 코드이다.
+
+fs 모듈과 path 모듈을 사용할 것이다. 
+
+template.js
+```js
+#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+
+const type = process.argv[2];
+const name = process.argv[3];
+const directory = process.argv[4] || '.';
+const htmlTemplate = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello</h1>
+    <p>CLI</p>
+</body>
+</html>
+`
+
+const routerTemplate = `
+const express = require('express');
+const router = express.Router();
+
+router.get('/', (req, res, next) => {
+    try{
+        res.send('ok');
+    }catch(error) {
+        console.error(error);
+        next(error);
+    }
+});
+
+module.exports = router;
+`
+
+const exist = (dir) => {
+    try {
+        fs.accessSync(dir, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+const mkdirp = (dir) => {
+    const dirname = path
+    .relative('.', path.normalize(dir))
+    .split(path.sep)
+    .filter(p => !!p);
+
+    dirname.forEach((d, idx) => {
+        const pathBuilder = dirname.slice(0, idx + 1).join(path.sep);
+        if(!exist(pathBuilder)) {
+            fs.mkdirSync(pathBuilder);
+        }
+    });
+}
+
+const makeTemplate = () => {
+    mkdirp(directory);
+    if(type === 'html'){
+        const pathToFile = path.join(directory, `${name}.html`);
+        if (exist(pathToFile)) {
+            console.error('이미 해당 파일이 존재합니다');
+        } else {
+            fs.writeFileSync(pathToFile, htmlTemplate);
+            console.log(pathToFile, '생성 완료');
+        }
+    }else if(type === 'express-router'){
+        const pathToFile = path.join(directory, `${name}.js`);
+        if (exist(pathToFile)) {
+            console.error('이미 해당 파일이 존재합니다');
+        }else {
+            fs.writeFileSync(pathToFile, htmlTemplate);
+            console.log(pathToFile, '생성 완료');
+        }
+    }
+    else {
+        console.error('html 또는 express-router 둘 중 하나를 입력하세요');
+    }
+}
+
+const program = () => {
+    if(!type || !name) {
+        console.error('사용 방법 : cli html|express-router 파일명 [생성 경로]');
+    }else {
+        makeTemplate();
+    }
+}
+
+program();
+```
+
+- 백틱을 사용해서 html과 js 코드를 작성할 수 있다.
+- exist와 mkdirp는 편의를 위해 만든 함수이다. exist 함수는 fs.accessSync 메서드를 통해 파일이나 폴더가 존재하는지 검사한다. 존재하지 않으면 에러가 발생하므로 try/catch 문으로 감쌌다. mkdirp 함수는 리눅스 명령어 mkdir -p 에서 이름을 따온 함수이다. 현재 경로와 입력한 경로의 상대적인 위치를 파악한 후 순차적으로 상위 폴더부터 만들어 나간다. public/html과 같은 경로를 인수로 제공하면 public 폴더를 만들고, 그 안에 html 폴더를 순차적으로 만든다. fs 모듀르이 sync가 붙은 메서드를 사용하지 않는게 좋은데, 그 이유는 블로킹을 유발해 다른 요청들이 대기하게 만들기 때문이지만 cli 프로그램은 웹 서버가 아니기에 사용해도 큰 문제는 안생긴다.
+- makeTemplate 함수는 실질적인 프로그램 로직을 담고 있다. 유효한 명령어가 들어왔다면, 디렉토리를 만든 후 type에 따라 파일을 만들고 파일 안에 템플릿 내용을 입력한다.
+- 명령어 호출 시 program 함수가 호출되어 내부 로직이 돌아가게 된다. 간단히 type과 name이 있는지 검사한 후 makeTemplate 함수를 호출한다.
+
+현재 cli 명령어는 index.js와 연결되어 있기에 template.js로 변경한다.
+
+실행을 해보면 정상적으로 작동한다는 것을 알 수 있다.
+
+콘솔 명령어를 실행한 디렉토리를 확인해본다. public, html, routes 폴더가 생기고 그 안에 main.html과 index.js가 들어 있을 것이다. 파일 생성 경로는 콘솔에 명령어를 입력한 경로를 기준으로 한다. 
+
+지금 방식의 단점은 사용자가 명령어와 명령어 옵션 순서를 모두 외우고 있어야 한다는 것이다. 
+
+이럴때에는 한단계씩 질문하게 코드를 작성하면 된다.
+
+template.js
+```js
+#!/usr/bin/env node
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+
+let rl;
+let type = process.argv[2];
+let name = process.argv[3];
+let directory = process.argv[4] || '.';
+
+const htmlTemplate = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Template</title>
+  </head>
+  <body>
+    <h1>Hello</h1>
+    <p>CLI</p>
+  </body>
+</html>
+`;
+
+const routerTemplate = `
+const express = require('express');
+const router = express.Router();
+ 
+router.get('/', (req, res, next) => {
+   try {
+     res.send('ok');
+   } catch (error) {
+     console.error(error);
+     next(error);
+   }
+});
+ 
+module.exports = router;
+`;
+
+const exist = (dir) => { // 폴더 존제 확인 함수
+  try {
+    fs.accessSync(dir, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+const mkdirp = (dir) => { // 경로 생성 함수
+  const dirname = path
+    .relative('.', path.normalize(dir))
+    .split(path.sep)
+    .filter(p => !!p);
+  dirname.forEach((d, idx) => {
+    const pathBuilder = dirname.slice(0, idx + 1).join(path.sep);
+    if (!exist(pathBuilder)) {
+      fs.mkdirSync(pathBuilder);
+    }
+  });
+};
+
+const makeTemplate = () => { // 템플릿 생성 함수
+  mkdirp(directory);
+  if (type === 'html') {
+    const pathToFile = path.join(directory, `${name}.html`);
+    if (exist(pathToFile)) {
+      console.error('이미 해당 파일이 존재합니다');
+    } else {
+      fs.writeFileSync(pathToFile, htmlTemplate);
+      console.log(pathToFile, '생성 완료');
+    }
+  } else if (type === 'express-router') {
+    const pathToFile = path.join(directory, `${name}.js`);
+    if (exist(pathToFile)) {
+      console.error('이미 해당 파일이 존재합니다');
+    } else {
+      fs.writeFileSync(pathToFile, routerTemplate);
+      console.log(pathToFile, '생성 완료');
+    }
+  } else {
+    console.error('html 또는 express-router 둘 중 하나를 입력하세요.');
+  }
+};
+
+const dirAnswer = (answer) => { // 경로 설정
+  directory = (answer && answer.trim()) || '.';
+  rl.close();
+  makeTemplate();
+};
+
+const nameAnswer = (answer) => { // 파일명 설정
+  if (!answer || !answer.trim()) {
+    console.clear();
+    console.log('name을 반드시 입력하셔야 합니다.');
+    return rl.question('파일명을 설정하세요. ', nameAnswer);
+  }
+  name = answer;
+  return rl.question('저장할 경로를 설정하세요.(설정하지 않으면 현재경로) ', dirAnswer);
+};
+
+const typeAnswer = (answer) => { // 템플릿 종류 설정
+  if (answer !== 'html' && answer !== 'express-router') {
+    console.clear();
+    console.log('html 또는 express-router만 지원합니다.');
+    return rl.question('어떤 템플릿이 필요하십니까? ', typeAnswer);
+  }
+  type = answer;
+  return rl.question('파일명을 설정하세요. ', nameAnswer);
+};
+
+const program = () => {
+  if (!type || !name) {
+    rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    console.clear();
+    rl.question('어떤 템플릿이 필요하십니까? ', typeAnswer);
+  } else {
+    makeTemplate();
+  }
+};
+
+program(); // 프로그램 실행부
+```
+
+이 방식으로 작성을 하게 되면 단계별로 질문을 하기에 명령어를 모르는 사람에게는 이 방식이 더 편리할 것이다.
+
+### commander, inquirer 사용하기
+(저자의 말) 이 책에서는 commander를 사용하여 예제 프로그램을 제작합니다. yargs나 meow도 훌륭한 라이트러리지만, commander가 사용방법이 좀 더 직관적입니다. commander 와 더불어 CLI 프로그램과 사용자 간의 상호작용을 돕는 inquirer 패키지, 콘솔 텍스트에 스타일을 추가하는 chalk 패키지도 함께 사용합니다.
+
+commander와 inquirer, chalk를 설치한다.
+
+```
+npm i commander@5 inquirer chalk
+```
+
+먼저 commander 사용법부터 알아보자
+
+commend.js
+```js
+#!/usr/bin/env node
+const { program } = require('commander');
+
+program
+    .version('0.0.1', '-v, --version')
+    .name('cli')
+
+program 
+    .command('template <type>')
+    .usage('<type> --file [filename] --path [path]')
+    .description('템플릿을 생성합니다.')
+    .alias('tmpl')
+    .option('-f, --filename [filename]', '파일명을 입력하세요', 'index')
+    .option('-d, --directory [path]', '생성 경로를 입력하세요', '.')
+    .action((type, options) => {
+        console.log(type, options.filename, options.directory);
+    });
+
+program
+    .command('*', {noHelp : true})
+    .action(() => {
+        console.log('해당 명령어를 찾을 수 없습니다.');
+        program.help();
+    });
+
+program
+    .parse(process.argv);
+```
+
+commander 패키지로부터 program 객체를 불러왔습니다. program 객체에는 다양한 메서드가 존재한다. 
+
+- version : 프로그램의 버전을 설정할 수 있다. 첫 번째 인수로 버전을 넣어주고, 두 번쨰 인수로 버전을 보여줄 옵션을 넣는다. 여러 개인 경우 쉽표로 구분하면 된다. 현재 --version으로 지정되어 있고, -v는 축약 옵션이다. node -v나 npm -v 처럼 cli -v로 프로그램의 버전을 확인할 수 있다.
+- usage : 이 메서드를 사용하면 명령어의 사용법을 설정할 수 있다. 사용법은 명령어에 도움 옵션을 붙였을 때 나타나는 설명서에 표시된다. 설명서는 commander가 자동으로 생성한다. [options]라고 되어 있는데, []는 필수가 아닌 선택이라는 뜻이다. 즉 옵션을 넣어도 되고 안 넣어도 된다.
+- name : 명령어의 이름을 넣은다. cli를 적으면 된다
+- command: 명령어를 설정하는 메서드이다. 현재 template < type>과 *라는 두 개의 명령어를 설정했다. 따라서 cli template html과 같이 명령할 수 있게 된다. 이때 html이 < type>에 대응된다. <>는 필수라는 의미이므로 type을 넣지 않으면 에러가 발생한다. *는 와일드카드 명령어로, 나머지 모든 명령어를 의미한다. template을 제외한 다른 명령어를 입력했을 때 실행된다.
+- description : 명령어에 대한 설명을 설정하는 메서드이다. 역시 명령어 설명서에 표시된다.
+- alias : 명령어의 별칭을 설정할 수 있다. template 명령어의 별칭이 tmpl이 설정되어 있으므로 cli template html 대신 cli tmpl html로 명령어를 실행할 수 있다.
+- option : 명령어에 대한 부가적인 옵션을 설정할 수 있습니다. template 명령어 같은 경우에는 파일명과 생성 경로를 옵션으로 가진다. 이 메서드의 첫 번째 인수가 옵션 명령어고, 두 번째 인수가 옵션에 대한 설명이다. 마지막 인수는 옵션 기본값이다. 옵션을 입력하지 않았을 경우 자동으로 기본값이 적용된다. 옵션 이름으로 name은 위의 name 메서드와 충돌할 위험이 있으니 사용하지 않는 것이 좋다.
+- requiredOption : option과 같은 역할을 하지만 필수로 입력해야 하는 옵션을 지정할 때 사용한다. 예제에서는 사용하지 않았다.
+- action : 명령어에 대한 실제 동작을 정의하는 메서드이다. < type> 같은 필수 요소나 옵션들을 매개변수로 가져올 수 있다.
+- help : 설명서를 보여주는 옵션이다. -h나 --help 옵션으로 설명서를 볼 수도 있지만, 이 메서드를 사용해 프로그래밍적으로 표시할 수도 있다.
+- parse : program 객체의 마지막에 붙이는 메서드이다. process.argv를 인수로 받아서 명령어와 옵션을 파싱한다.
