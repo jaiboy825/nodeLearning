@@ -8193,3 +8193,202 @@ commander 패키지로부터 program 객체를 불러왔습니다. program 객�
 - action : 명령어에 대한 실제 동작을 정의하는 메서드이다. < type> 같은 필수 요소나 옵션들을 매개변수로 가져올 수 있다.
 - help : 설명서를 보여주는 옵션이다. -h나 --help 옵션으로 설명서를 볼 수도 있지만, 이 메서드를 사용해 프로그래밍적으로 표시할 수도 있다.
 - parse : program 객체의 마지막에 붙이는 메서드이다. process.argv를 인수로 받아서 명령어와 옵션을 파싱한다.
+
+이제 다시 전역 설치를 하고 commander가 기본적으로 제공하는 옵션인 -v 와 -h를 입력해보겠다.
+
+명령어에 -h 옵션을 붙이면 명령어 설명서가 나온다. 위에서 usage나 name, description, option 메서드에 적었던 설명이 그대로 표시된다.
+
+cli template 명령어를 입력했을 때는 필수 요소인 < type>을 빠뜨렸으므로 에러를 표시한다. 이렇게 설명과 에러 검증을 자동으로 해줘서 편리하다.
+
+이제 실제로 동작하는 코드를 작성해보겠다. template.js의 코드를 대부분 가져온다.
+
+command.js
+```js
+#!/usr/bin/env node
+const { program } = require('commander');
+const fs = require('fs');
+const path = require('path');
+const inquirer = require('inquirer');
+const chalk = require('chalk');
+
+const htmlTemplate = `
+<!DOCTYPE html>
+  <html>
+  <head>
+    <meta chart="utf-8" />
+    <title>Template</title>
+  </head>
+  <body>
+    <h1>Hello</h1>
+    <p>CLI</p>
+  </body>
+</html>
+`;
+
+const routerTemplate = `
+const express = require('express');
+const router = express.Router();
+ 
+router.get('/', (req, res, next) => {
+   try {
+     res.send('ok');
+   } catch (error) {
+     console.error(error);
+     next(error);
+   }
+});
+ 
+module.exports = router;
+`;
+
+const exist = (dir) => {
+  try {
+    fs.accessSync(dir, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+const mkdirp = (dir) => {
+  const dirname = path
+    .relative('.', path.normalize(dir))
+    .split(path.sep)
+    .filter(p => !!p);
+  dirname.forEach((d, idx) => {
+    const pathBuilder = dirname.slice(0, idx + 1).join(path.sep);
+    if (!exist(pathBuilder)) {
+      fs.mkdirSync(pathBuilder);
+    }
+  });
+};
+
+const makeTemplate = (type, name, directory) => {
+  mkdirp(directory);
+  if (type === 'html') {
+    const pathToFile = path.join(directory, `${name}.html`);
+    if (exist(pathToFile)) {
+      console.error(chalk.bold.red('이미 해당 파일이 존재합니다'));
+    } else {
+      fs.writeFileSync(pathToFile, htmlTemplate);
+      console.log(chalk.green(pathToFile, '생성 완료'));
+    }
+  } else if (type === 'express-router') {
+    const pathToFile = path.join(directory, `${name}.js`);
+    if (exist(pathToFile)) {
+      console.error(chalk.bold.red('이미 해당 파일이 존재합니다'));
+    } else {
+      fs.writeFileSync(pathToFile, routerTemplate);
+      console.log(chalk.green(pathToFile, '생성 완료'));
+    }
+  } else {
+    console.error(chalk.bold.red('html 또는 express-router 둘 중 하나를 입력하세요.'));
+  }
+};
+
+program
+  .version('0.0.1', '-v, --version')
+  .name('cli');
+
+program
+  .command('template <type>')
+  .usage('<type> --filename [filename] --path [path]')
+  .description('템플릿을 생성합니다.')
+  .alias('tmpl')
+  .option('-f, --filename [filename]', '파일명을 입력하세요.', 'index')
+  .option('-d, --directory [path]', '생성 경로를 입력하세요', '.')
+  .action((type, options) => {
+    makeTemplate(type, options.filename, options.directory);
+  });
+
+program
+  .action((cmd, args) => {
+    if (args) {
+      console.log(chalk.bold.red('해당 명령어를 찾을 수 없습니다.'));
+      program.help();
+    } else {
+      inquirer.prompt([{
+        type: 'list',
+        name: 'type',
+        message: '템플릿 종류를 선택하세요.',
+        choices: ['html', 'express-router'],
+      }, {
+        type: 'input',
+        name: 'name',
+        message: '파일의 이름을 입력하세요.',
+        default: 'index',
+      }, {
+        type: 'input',
+        name: 'directory',
+        message: '파일이 위치할 폴더의 경로를 입력하세요.',
+        default: '.',
+      }, {
+        type: 'confirm',
+        name: 'confirm',
+        message: '생성하시겠습니까?',
+      }])
+        .then((answers) => {
+          if (answers.confirm) {
+            makeTemplate(answers.type, answers.name, answers.directory);
+            console.log(chalk.rgb(128, 128, 128)('터미널을 종료합니다.'));
+          }
+        });
+    }
+  })
+  .parse(process.argv);
+```
+
+옵션들은 순서를 바꿔서 입력해도 된다. -d public/html -f new 나 -f new나 -f new -d public/html이나 똑같다. cli copy 처럼 미리 등록하지 않은 명령어를 사용하면 * 와일드카드 명령어가 실행된다.
+
+commander에서 알아두어야 할 것은 기본 명령어는 * 명령어에 해당하지 않는다는 것이다. 이 명령어에 동작을 추가하려면 * 명령어를 없애고 일반 action에서 매개변수에 따라 분기 처리를 해야한다.
+
+commander를 사용하더라도 여전히 명령어를 외워야 하기때문에 cli 명령어를 사용할 때 사용자와 상호작용할 수 있도록 만들었다.
+
+readline 모듈을 사용할 때는 엄청 복잡했던 코드가 간결해졌다. * command를 없애고 program 객체에 바로 action 메서드를 붙인다. 매개변수로 cmd와 args가 들어오는데, 첫 번쨰 매개변수인 cmd에는 명령어에 대한 전체적인 내용이 들어 있고 두 번째 매개변수인 args에는 cli 명령어 다음에 오는 인수가 들어있다. 만약 명령어가 cli copy명 ['copy'] 가 들어있고, 명령어가 cli면 undefined가 들어 있다. 따라서 args 값의 유무로 cli를 입력했는지 입력하지 않았는지를 구별할 수 있다.
+
+이제 cli를 입력하면 사용자와의 상호작용을 시작한다. inquirer 패키지로부터 불러온 inquirer 객체는 prompt라는 메서드를 가지고 있다. 이 메서드는 인수로 질문 목록을 받고, 프로미스를 통해 답변을 반환한다.
+
+- type : 질문의 종류이다. input, checkbox, list, password, confirm 등이 있다. 이 예제에서는 input, list, confirm 과 같은 종류의 질문을 사용한다.
+- name : 질문의 이름이다. 나중에 답변 객체가 속성명으로 질문의 이름을, 속성값으로 질문의 답을 가지게 된다.
+- message : 사용자에게 표시되는 문자열이다. 여기에 실제 질문을 적으면 된다.
+- choices : type이 checkbox, list 등인 경우 선택지를 넣는 곳이다. 배열로 넣으면 된다.
+- default : 답을 적지 않았을 경우 적용되는 기본값이다.
+
+위 코드에서는 질문 네 개를 연달아 한다. 질문 객체 네 개를 배열로 묶어 prompt 메서드의 인수로 제공했다. prompt 메서드는 프로미스를 반환하므로 then 메서드를 붙여 답변을 매개변수를 통해 받을 수 있다. 
+
+콘솔에 명령어를 입력해보면 훨씬 더 풍부한 상호작용을 하는 것을 볼 수 있다.
+
+list 타입의 질문은 키보드 화살표를 통해 답변을 고를 수 있다. 답변 선택지는 choices 속성에 넣어준 것들이다. 계속해서 나머지 질문을 진행하면 입력했던 답변들은 answer 객체에 저장되어 프로미스를 통해 반환된다. 질문 객체에 넣어줬던 name 속성과 질문의 답변이 각각 키와 값이 된다. 
+
+그리고 chalk 패키지를 사용했다. 이 패키지가 특별한 기능을 가진 것은 아니며, 검은색과 흰색밖에 없는 터미널에 색과 스타일을 추가하였다.
+
+console.log와 error에 chalk를 적용했다.
+
+사용법은 간단한데, chalk 객체의 메서드들로 문자열을 감싸면 된다. green, yellow, red, blue와 같은 매우 익숙한 색이 메서드로 추가되어 있다. 직접 색을 지정하고 싶아면 rgb 메서드나 hex 메서드를 사용하면 된다.
+
+글자색 외에도 배경색을 지정할 수도 있다. 테스트의 스타일 또한 정할 수 있는데, 굵거나 밑줄을 그을 수도 있다.
+
+세 가지를 다 적용한다고 하면 chalk.red.bgBlue.bold <- 이런식으로 하면 된다. 
+
+cli 프로그램이다보니 지루할 수 있어서 집중력을 끌어올리는데 사용하면 좋을 수 있다.
+
+지금까지 commander, inquirer, chalk를 사용해 cli 프로그램을 제작했다. 간단한 cli 프로그램을 제작할 때는 commander나 inquirer 패키지가 불필요하다고 생각할지도 모른다. 패키지를 사용하지 않아도 되지만 프로그램이 복잡해질수록 간결해지고 확장을 쉽게 하기 위해서는 패키지 사용이 좋을 수 있다.
+
+##### cli 프로그램 만들기 끝
+
+<hr>
+
+## aws와 gcp로 배포하기는 요금 발생 위험 및 아직은 하지 않아도 된다고 판단하여 넘어갔습니다.
+
+<hr>
+
+## 서버리스 노드 개발은 요금 발생 위험 및 아직은 하지 않아도 된다고 판단하여 넘어갔습니다.
+
+<hr>
+
+노드를 공부하면서 느낀 점
+- 기존에 알고 있던 것들은 그냥 맛보기에 불과했구나..라고 할 정도로 많은 정보들이 있었고, sns, 채팅, cli 등의 프로그램들을 만들어보면서 이후에 만들 노드 프로그램에서 어떻게 코드를 작성해야될지 알 수 있었다.
+- 노드 프로젝트의 기본 틀과 다양한 패키지들을 알게 되어서 추후에 사용하기 좋을 것 같다.
+- vue와 노드를 둘 다 공부하였는데, 두 가지 모두 재미가 있어서 아직도 프론트와 백에 대한 고민이 크다.
+
+## Node.js 교과서 스터디 끝
